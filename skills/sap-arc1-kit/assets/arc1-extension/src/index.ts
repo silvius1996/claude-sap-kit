@@ -9,7 +9,7 @@ import smartFormReplace from './tools/Custom_SmartFormReplace.js';
 //   ARC1_PLUGINS=<absolute path>/arc1-extension/dist/index.js
 const plugin: Plugin = {
   name: 'arc1-sap-tools',
-  version: '0.4.0',
+  version: '0.5.0',
   apiVersion: 1,
   tools: [launchReport, printPreview, smartFormRead, smartFormWrite, smartFormReplace],
 };
