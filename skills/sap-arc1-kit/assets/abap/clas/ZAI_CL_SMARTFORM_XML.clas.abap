@@ -126,7 +126,7 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
       WHERE formname = @iv_name
       INTO @DATA(lv_language).
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform( iv_text = |SmartForms { iv_name } not found| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform EXPORTING iv_text = |SmartForms { iv_name } not found|.
     ENDIF.
 
     DATA(lo_form) = NEW cl_ssf_fb_smart_form( ).
@@ -134,8 +134,10 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         lo_form->load( im_formname = iv_name
                        im_language = lv_language ).
       CATCH cx_ssf_fb INTO DATA(lx_load).
-        RAISE EXCEPTION NEW zai_cx_smartform( iv_text  = |SmartForms { iv_name } cannot be read: { lx_load->get_text( ) }|
-                                                  previous = lx_load ).
+        RAISE EXCEPTION TYPE zai_cx_smartform
+          EXPORTING
+            iv_text  = |SmartForms { iv_name } cannot be read: { lx_load->get_text( ) }|
+            previous = lx_load.
     ENDTRY.
 
     DATA(li_ixml)     = cl_ixml=>create( ).
@@ -205,8 +207,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
 
   METHOD check_target.
     IF iv_name NP gc_writable_pattern.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |Writing allowed only for SmartForms { gc_writable_pattern }: { iv_name } refused| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |Writing allowed only for SmartForms { gc_writable_pattern }: { iv_name } refused|.
     ENDIF.
 
     SELECT SINGLE devclass, author FROM tadir
@@ -216,8 +219,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
       INTO @DATA(ls_tadir).
     IF sy-subrc = 0.
       IF ls_tadir-devclass <> '$TMP' OR ls_tadir-author <> sy-uname.
-        RAISE EXCEPTION NEW zai_cx_smartform(
-          iv_text = |SmartForms { iv_name } cannot be changed: package { ls_tadir-devclass }, author { ls_tadir-author }| ).
+        RAISE EXCEPTION TYPE zai_cx_smartform
+          EXPORTING
+            iv_text = |SmartForms { iv_name } cannot be changed: package { ls_tadir-devclass }, author { ls_tadir-author }|.
       ENDIF.
       rs_target-tadir_exists = abap_true.
     ENDIF.
@@ -241,8 +245,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
     li_parser->set_normalizing( abap_false ).
     IF li_parser->parse( ) <> 0.
       DATA(li_parse_error) = li_parser->get_error( index = 0 ).
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |Invalid XML: { COND #( WHEN li_parse_error IS BOUND THEN li_parse_error->get_reason( ) ) }| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |Invalid XML: { COND #( WHEN li_parse_error IS BOUND THEN li_parse_error->get_reason( ) ) }|.
     ENDIF.
 
     " Remove only the indentation between elements: XML_UPLOAD reads the first child as an element in several places
@@ -252,7 +257,7 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
       IF li_node->get_type( ) = if_ixml_node=>co_node_text
          AND li_node->get_parent( )->num_children( ) > 1
          AND matches( val   = li_node->get_value( )
-                      pcre  = `\s*` ).
+                      regex = `[[:space:]]*` ).
         APPEND li_node TO lt_indentation.
       ENDIF.
       li_node = li_iterator->get_next( ).
@@ -263,18 +268,19 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
 
     ri_root = li_document->get_root_element( ).
     IF ri_root IS INITIAL OR ri_root->get_name( ) <> 'SMARTFORM'.
-      RAISE EXCEPTION NEW zai_cx_smartform( iv_text = |Invalid XML: SMARTFORM root missing| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform EXPORTING iv_text = |Invalid XML: SMARTFORM root missing|.
     ENDIF.
     " Without namespace XML_UPLOAD ignores all nodes and would save an empty form
     IF ri_root->get_namespace_uri( ) <> cl_ssf_fb_sf_basis=>xml_ns_uri_sf.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |Invalid XML: SmartForms namespace { cl_ssf_fb_sf_basis=>xml_ns_uri_sf } missing on the root| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |Invalid XML: SmartForms namespace { cl_ssf_fb_sf_basis=>xml_ns_uri_sf } missing on the root|.
     ENDIF.
     " Same risk with a form without content: neither XML_UPLOAD nor CHECK rejects it
     IF ri_root->find_from_name_ns( name  = 'HEADER'
                                    depth = 1
                                    uri   = cl_ssf_fb_sf_basis=>xml_ns_uri_ifr ) IS NOT BOUND.
-      RAISE EXCEPTION NEW zai_cx_smartform( iv_text = |Invalid XML: form HEADER missing| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform EXPORTING iv_text = |Invalid XML: form HEADER missing|.
     ENDIF.
   ENDMETHOD.
 
@@ -309,9 +315,10 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
       EXCEPTIONS
         OTHERS                = 1.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |TADIR entry for { iv_name } not { COND #( WHEN iv_delete = abap_true THEN `removed` ELSE `created` ) }: | &&
-                  |{ sy-msgid } { sy-msgno } { sy-msgv1 }| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |TADIR entry for { iv_name } not { COND #( WHEN iv_delete = abap_true THEN `removed` ELSE `created` ) }: | &&
+                    |{ sy-msgid } { sy-msgno } { sy-msgv1 }|.
     ENDIF.
   ENDMETHOD.
 
@@ -325,9 +332,10 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
                           mode                = COND #( WHEN iv_exists = abap_true THEN `MODIFY` ELSE `INSERT` )
                           formname            = iv_name ).
       CATCH cx_ssf_fb INTO DATA(lx_enqueue).
-        RAISE EXCEPTION NEW zai_cx_smartform(
-          iv_text  = |SmartForms { iv_name } cannot be locked (edited by another user?): { lx_enqueue->get_text( ) }|
-          previous = lx_enqueue ).
+        RAISE EXCEPTION TYPE zai_cx_smartform
+          EXPORTING
+            iv_text  = |SmartForms { iv_name } cannot be locked (edited by another user?): { lx_enqueue->get_text( ) }|
+            previous = lx_enqueue.
     ENDTRY.
 
     TRY.
@@ -363,15 +371,19 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
             lo_form->dequeue( iv_name ).
           CATCH cx_ssf_fb ##NO_HANDLER.
         ENDTRY.
-        RAISE EXCEPTION NEW zai_cx_smartform( iv_text  = |SmartForms { iv_name } not saved: { lx_error->get_text( ) }|
-                                                  previous = lx_error ).
+        RAISE EXCEPTION TYPE zai_cx_smartform
+          EXPORTING
+            iv_text  = |SmartForms { iv_name } not saved: { lx_error->get_text( ) }|
+            previous = lx_error.
       CATCH zai_cx_smartform INTO DATA(lx_check).
         TRY.
             lo_form->dequeue( iv_name ).
           CATCH cx_ssf_fb ##NO_HANDLER.
         ENDTRY.
-        RAISE EXCEPTION NEW zai_cx_smartform( iv_text  = |SmartForms { iv_name } not saved: { lx_check->get_text( ) }|
-                                                  previous = lx_check ).
+        RAISE EXCEPTION TYPE zai_cx_smartform
+          EXPORTING
+            iv_text  = |SmartForms { iv_name } not saved: { lx_check->get_text( ) }|
+            previous = lx_check.
     ENDTRY.
 
     TRY.
@@ -389,9 +401,10 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
                                               WHERE ( class = cl_ssf_fb_check=>c_error )
                                               ( condense( CONV string( ls_error-msg ) ) ) ).
         IF lt_errors IS NOT INITIAL.
-          RAISE EXCEPTION NEW zai_cx_smartform(
-            iv_text  = |Form check: { lines( lt_errors ) } errors, e.g. { concat_lines_of( table = VALUE string_table( FOR lv_error IN lt_errors FROM 1 TO 3 ( lv_error ) ) sep = ` / ` ) }|
-            previous = lx_check ).
+          RAISE EXCEPTION TYPE zai_cx_smartform
+            EXPORTING
+              iv_text  = |Form check: { lines( lt_errors ) } errors, e.g. { concat_lines_of( table = VALUE string_table( FOR lv_error IN lt_errors FROM 1 TO 3 ( lv_error ) ) sep = ` / ` ) }|
+              previous = lx_check.
         ENDIF.
     ENDTRY.
   ENDMETHOD.
@@ -408,8 +421,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         illegal_formtype = 5
         OTHERS           = 6.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |SmartForms { iv_name } saved but not generated (return code { sy-subrc }): { sy-msgid } { sy-msgno } { sy-msgv1 }| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |SmartForms { iv_name } saved but not generated (return code { sy-subrc }): { sy-msgid } { sy-msgno } { sy-msgv1 }|.
     ENDIF.
 
     CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
@@ -422,8 +436,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         no_function_module = 2
         OTHERS             = 3.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |SmartForms { iv_name } saved but function module not available (return code { sy-subrc })| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |SmartForms { iv_name } saved but function module not available (return code { sy-subrc })|.
     ENDIF.
   ENDMETHOD.
 
@@ -441,9 +456,10 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
                                    iv_transport    = iv_transport
                                    iv_check_author = iv_check_author ).
     IF ls_info-token <> iv_token.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |{ iv_original } or { iv_copy } changed after prepare (original last changed by | &&
-                  |{ ls_info-lastuser } on { ls_info-lastdate DATE = USER } at { ls_info-lasttime TIME = USER }): run prepare again| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |{ iv_original } or { iv_copy } changed after prepare (original last changed by | &&
+                    |{ ls_info-lastuser } on { ls_info-lastdate DATE = USER } at { ls_info-lasttime TIME = USER }): run prepare again|.
     ENDIF.
 
     DATA(li_root) = parse( read( iv_copy ) ).
@@ -460,25 +476,29 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         rv_fm_name = generate( iv_original ).
       CATCH zai_cx_smartform INTO DATA(lx_error).
         " The entry in the request stays: say so, otherwise the unchanged version would be released
-        RAISE EXCEPTION NEW zai_cx_smartform(
-          iv_text  = |{ lx_error->get_text( ) } (warning: { iv_original } is already recorded in transport request { iv_transport })|
-          previous = lx_error ).
+        RAISE EXCEPTION TYPE zai_cx_smartform
+          EXPORTING
+            iv_text  = |{ lx_error->get_text( ) } (warning: { iv_original } is already recorded in transport request { iv_transport })|
+            previous = lx_error.
     ENDTRY.
   ENDMETHOD.
 
   METHOD check_replace.
     " First the checks on names and request, which need no existing forms
     IF iv_original NP 'Z*' AND iv_original NP 'Y*'.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |Replacement allowed only for SmartForms Z* or Y*: { iv_original } refused| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |Replacement allowed only for SmartForms Z* or Y*: { iv_original } refused|.
     ENDIF.
     IF iv_original CP gc_writable_pattern.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |{ iv_original } is a { gc_writable_pattern } copy: specify the original form| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |{ iv_original } is a { gc_writable_pattern } copy: specify the original form|.
     ENDIF.
     IF iv_copy NP gc_writable_pattern.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |The copy must be a SmartForms { gc_writable_pattern }: { iv_copy } refused| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |The copy must be a SmartForms { gc_writable_pattern }: { iv_copy } refused|.
     ENDIF.
 
     SELECT SINGLE as4user FROM e070
@@ -487,8 +507,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         AND trstatus   IN ('D','L')
       INTO @DATA(lv_tr_owner).
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |Transport request { iv_transport } does not exist, is already released or is not a workbench request| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |Transport request { iv_transport } does not exist, is already released or is not a workbench request|.
     ENDIF.
 
     SELECT SINGLE devclass, author FROM tadir
@@ -497,31 +518,34 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         AND obj_name = @iv_original
       INTO @DATA(ls_tadir).
     IF sy-subrc <> 0 OR ls_tadir-devclass IS INITIAL OR ls_tadir-devclass = '$TMP'.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |SmartForms { iv_original } is not in the object directory or is local ($TMP): cannot be replaced| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |SmartForms { iv_original } is not in the object directory or is local ($TMP): cannot be replaced|.
     ENDIF.
     " With the logged-on user, not the one declared in the client configuration
     IF iv_check_author = abap_true AND ls_tadir-author <> sy-uname.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |SmartForms { iv_original } belongs to another user: author { ls_tadir-author }, logged-on user { sy-uname }| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |SmartForms { iv_original } belongs to another user: author { ls_tadir-author }, logged-on user { sy-uname }|.
     ENDIF.
 
     SELECT SINGLE version, lastuser, lastdate, lasttime, masterlang FROM stxfadm
       WHERE formname = @iv_original
       INTO @DATA(ls_original).
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform( iv_text = |SmartForms { iv_original } not found| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform EXPORTING iv_text = |SmartForms { iv_original } not found|.
     ENDIF.
     SELECT SINGLE version, lastdate, lasttime, masterlang FROM stxfadm
       WHERE formname = @iv_copy
       INTO @DATA(ls_copy).
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform( iv_text = |Copy { iv_copy } not found| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform EXPORTING iv_text = |Copy { iv_copy } not found|.
     ENDIF.
     " The copy texts are in its original language: uploaded into the original they would end up in the wrong language
     IF ls_copy-masterlang <> ls_original-masterlang.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |Different original language: { iv_copy } { ls_copy-masterlang }, { iv_original } { ls_original-masterlang }| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |Different original language: { iv_copy } { ls_copy-masterlang }, { iv_original } { ls_original-masterlang }|.
     ENDIF.
 
     " The token is a snapshot of the original (package and author included) and of the copy: if they change
@@ -557,8 +581,9 @@ CLASS zai_cl_smartform_xml IMPLEMENTATION.
         unknown_objectclass      = 3
         OTHERS                   = 4.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_smartform(
-        iv_text = |{ iv_name } not recorded in transport request { iv_transport }: { sy-msgid } { sy-msgno } { sy-msgv1 } { sy-msgv2 }| ).
+      RAISE EXCEPTION TYPE zai_cx_smartform
+        EXPORTING
+          iv_text = |{ iv_name } not recorded in transport request { iv_transport }: { sy-msgid } { sy-msgno } { sy-msgv1 } { sy-msgv2 }|.
     ENDIF.
   ENDMETHOD.
 ENDCLASS.

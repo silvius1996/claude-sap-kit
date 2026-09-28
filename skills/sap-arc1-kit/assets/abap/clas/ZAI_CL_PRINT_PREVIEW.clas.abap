@@ -105,14 +105,16 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
     IF lv_returncode <> 0.
       DATA(lv_message) = COND string( WHEN sy-msgid IS NOT INITIAL
                                       THEN |{ sy-msgid } { sy-msgno }: { sy-msgv1 } { sy-msgv2 } { sy-msgv3 } { sy-msgv4 }| ).
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text = |Print program { ls_tnapr-pgnam } failed (return code { lv_returncode }) { lv_message }| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Print program { ls_tnapr-pgnam } failed (return code { lv_returncode }) { lv_message }|.
     ENDIF.
 
     DATA(lt_spools) = find_spools( lv_title ).
     IF lt_spools IS INITIAL.
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text = |Print program { ls_tnapr-pgnam } created no spool request| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Print program { ls_tnapr-pgnam } created no spool request|.
     ENDIF.
 
     DATA(ls_first) = lt_spools[ 1 ].
@@ -154,8 +156,9 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
       UP TO 1 ROWS.
     ENDSELECT.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text = |No { iv_output_type } message for document { lv_objky ALPHA = OUT }| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |No { iv_output_type } message for document { lv_objky ALPHA = OUT }|.
     ENDIF.
   ENDMETHOD.
 
@@ -167,15 +170,17 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
         AND nacha = '1'
       INTO CORRESPONDING FIELDS OF @rs_tnapr.
     IF sy-subrc <> 0 OR rs_tnapr-pgnam IS INITIAL OR rs_tnapr-ronam IS INITIAL.
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text = |Output type { is_nast-kappl }/{ is_nast-kschl } has no print program configured (TNAPR)| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Output type { is_nast-kappl }/{ is_nast-kschl } has no print program configured (TNAPR)|.
     ENDIF.
   ENDMETHOD.
 
   METHOD override_config.
     IF iv_form IS INITIAL OR iv_program IS INITIAL OR iv_routine IS INITIAL.
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text = |Replacing the form requires form, program and routine together| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Replacing the form requires form, program and routine together|.
     ENDIF.
 
     SELECT SINGLE name FROM progdir
@@ -183,7 +188,9 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
         AND state = 'A'
       INTO @DATA(lv_program).
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_print_preview( iv_text = |Print program { iv_program } does not exist or is not active| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Print program { iv_program } does not exist or is not active|.
     ENDIF.
 
     DATA lv_fm_name TYPE rs38l_fnam.
@@ -197,7 +204,9 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
         no_function_module = 2
         OTHERS             = 3.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_print_preview( iv_text = |SmartForms { iv_form } does not exist or is not active| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |SmartForms { iv_form } does not exist or is not active|.
     ENDIF.
 
     " Configuration in memory only: TNAPR is neither read nor written
@@ -278,13 +287,15 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
           EXCEPTIONS
             OTHERS          = 1.
       WHEN OTHERS.
-        RAISE EXCEPTION NEW zai_cx_print_preview(
-          iv_text = |Spool { is_spool-rqident }: type { is_spool-rqdoctype } cannot be converted to PDF| ).
+        RAISE EXCEPTION TYPE zai_cx_print_preview
+          EXPORTING
+            iv_text = |Spool { is_spool-rqident }: type { is_spool-rqdoctype } cannot be converted to PDF|.
     ENDCASE.
 
     IF sy-subrc <> 0 OR rv_pdf IS INITIAL.
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text = |Conversion of spool { is_spool-rqident } ({ is_spool-rqdoctype }) to PDF failed, return code { sy-subrc }| ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Conversion of spool { is_spool-rqident } ({ is_spool-rqdoctype }) to PDF failed, return code { sy-subrc }|.
     ENDIF.
   ENDMETHOD.
 ENDCLASS.

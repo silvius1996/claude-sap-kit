@@ -18,8 +18,9 @@ FUNCTION zai_print_call_routine
     ASSIGN ('TNAPR') TO <ls_tnapr>.
   ENDIF.
   IF sy-subrc <> 0.
-    RAISE EXCEPTION NEW zai_cx_print_preview(
-      iv_text = |Work areas NAST/TNAPR not available in the function group| ).
+    RAISE EXCEPTION TYPE zai_cx_print_preview
+      EXPORTING
+        iv_text = |Work areas NAST/TNAPR not available in the function group|.
   ENDIF.
 
   <ls_nast>  = is_nast.
@@ -29,8 +30,9 @@ FUNCTION zai_print_call_routine
   TRY.
       PERFORM (is_tnapr-ronam) IN PROGRAM (is_tnapr-pgnam) USING ev_returncode ' '.
     CATCH cx_sy_dyn_call_error cx_sy_program_not_found INTO DATA(lx_call).
-      RAISE EXCEPTION NEW zai_cx_print_preview(
-        iv_text  = |Routine { is_tnapr-ronam } not found in program { is_tnapr-pgnam }|
-        previous = lx_call ).
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text  = |Routine { is_tnapr-ronam } not found in program { is_tnapr-pgnam }|
+          previous = lx_call.
   ENDTRY.
 ENDFUNCTION.

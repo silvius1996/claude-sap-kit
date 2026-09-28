@@ -48,7 +48,10 @@ skills/
 
 ## Requirements
 
-- SAP NetWeaver / S/4HANA with ABAP 7.50 or later. Tested on S/4HANA 2025 (SAP_BASIS 816).
+- SAP_BASIS 7.50 or later, on-premise or private cloud: **ECC 6.0 EHP8** and **S/4HANA** (all releases).
+  Tested live on S/4HANA 2025 (SAP_BASIS 816); the ABAP sources are syntax-checked for 7.50 and avoid newer constructs.
+  On ECC the class `/UI2/CL_JSON` must exist (used for the ALV output).
+  Not for S/4HANA Public Cloud or the BTP ABAP Environment (no `SUBMIT`, NAST or SOAP-RFC there).
 - [ARC-1](https://github.com/arc-mcp/arc-1) 1.4.0 or later, configured in Claude Code with writes enabled.
 - SICF service `/sap/bc/soap/rfc` active.
 - SAP user with `S_RFC` on the kit function group, plus the authorizations for the reports to run and for spool requests.

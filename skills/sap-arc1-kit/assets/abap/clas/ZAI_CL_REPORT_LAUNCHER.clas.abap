@@ -118,7 +118,7 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
     ENDIF.
 
     IF lv_report IS INITIAL.
-      RAISE EXCEPTION NEW zai_cx_launcher( iv_text = |Specify a report or a transaction| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher EXPORTING iv_text = |Specify a report or a transaction|.
     ENDIF.
 
     check_report( lv_report ).
@@ -176,8 +176,9 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
         variant_obsolete     = 2
         OTHERS               = 3.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_launcher(
-        iv_text = |Cannot read variant { iv_variant } of { iv_report } (sy-subrc { sy-subrc })| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher
+        EXPORTING
+          iv_text = |Cannot read variant { iv_variant } of { iv_report } (sy-subrc { sy-subrc })|.
     ENDIF.
   ENDMETHOD.
 
@@ -188,7 +189,7 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
       WHERE tcode = @iv_tcode
       INTO @ev_report.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_launcher( iv_text = |Transaction { iv_tcode } does not exist| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher EXPORTING iv_text = |Transaction { iv_tcode } does not exist|.
     ENDIF.
 
     CALL FUNCTION 'AUTHORITY_CHECK_TCODE'
@@ -199,7 +200,7 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
         not_ok = 1
         OTHERS = 2.
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_launcher( iv_text = |No authorization for transaction { iv_tcode }| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher EXPORTING iv_text = |No authorization for transaction { iv_tcode }|.
     ENDIF.
 
     " Report transactions with a variant: report and variant are in the parameters
@@ -207,19 +208,18 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
       WHERE tcode = @iv_tcode
       INTO @DATA(lv_param).
     IF sy-subrc = 0.
-      FIND PCRE `D_SREPOVARI-REPORT=([^;]+)` IN lv_param SUBMATCHES DATA(lv_report).
+      FIND REGEX `D_SREPOVARI-REPORT=([^;]+)` IN lv_param SUBMATCHES DATA(lv_report).
       IF sy-subrc = 0.
         ev_report = condense( lv_report ).
       ENDIF.
-      FIND PCRE `D_SREPOVARI-VARIANT=([^;]+)` IN lv_param SUBMATCHES DATA(lv_variant).
+      FIND REGEX `D_SREPOVARI-VARIANT=([^;]+)` IN lv_param SUBMATCHES DATA(lv_variant).
       IF sy-subrc = 0.
         ev_variant = condense( lv_variant ).
       ENDIF.
     ENDIF.
 
     IF ev_report IS INITIAL.
-      RAISE EXCEPTION NEW zai_cx_launcher(
-        iv_text = |Transaction { iv_tcode } is not linked to a report| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher EXPORTING iv_text = |Transaction { iv_tcode } is not linked to a report|.
     ENDIF.
   ENDMETHOD.
 
@@ -228,11 +228,12 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
       WHERE name = @iv_report
       INTO @DATA(lv_subc).
     IF sy-subrc <> 0.
-      RAISE EXCEPTION NEW zai_cx_launcher( iv_text = |Program { iv_report } does not exist| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher EXPORTING iv_text = |Program { iv_report } does not exist|.
     ENDIF.
     IF lv_subc <> '1'.
-      RAISE EXCEPTION NEW zai_cx_launcher(
-        iv_text = |{ iv_report } is not an executable report (type { lv_subc }): dialog programs cannot be run| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher
+        EXPORTING
+          iv_text = |{ iv_report } is not an executable report (type { lv_subc }): dialog programs cannot be run|.
     ENDIF.
   ENDMETHOD.
 
@@ -242,8 +243,9 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
         AND variant = @iv_variant
       INTO @DATA(lv_exists).
     IF lv_exists = abap_false.
-      RAISE EXCEPTION NEW zai_cx_launcher(
-        iv_text = |Variant { iv_variant } does not exist for { iv_report } in client { sy-mandt }| ).
+      RAISE EXCEPTION TYPE zai_cx_launcher
+        EXPORTING
+          iv_text = |Variant { iv_variant } does not exist for { iv_report } in client { sy-mandt }|.
     ENDIF.
   ENDMETHOD.
 

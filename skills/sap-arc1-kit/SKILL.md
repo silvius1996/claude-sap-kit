@@ -15,9 +15,11 @@ The kit has two parts that are installed together:
 The tools call the function modules through the standard SOAP-RFC service (`/sap/bc/soap/rfc`),
 because ARC-1 extensions can only make HTTP calls.
 
-The sources are in `assets/` (`abap/clas`, `abap/fugr`, `arc1-extension`). They were tested
-on S/4HANA 2025 (SAP_BASIS 816) and need ABAP 7.50+ with modern syntax
-(`NEW`, `VALUE`, `FIND PCRE`): on older releases run a syntax check first.
+The sources are in `assets/` (`abap/clas`, `abap/fugr`, `arc1-extension`). They need
+SAP_BASIS 7.50 or later: ECC 6.0 EHP8 and every S/4HANA on-premise / private cloud release.
+They were tested live on S/4HANA 2025 (SAP_BASIS 816) and syntax-checked for 7.50; they avoid
+newer constructs on purpose (`RAISE EXCEPTION TYPE`, POSIX `REGEX` instead of `NEW` and PCRE).
+On ECC check before installing that the class `/UI2/CL_JSON` exists (used for the ALV output).
 
 ## Before starting: what to ask or check
 
