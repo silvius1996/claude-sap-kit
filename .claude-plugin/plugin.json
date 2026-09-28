@@ -1,0 +1,9 @@
+{
+  "name": "sap-arc1-kit",
+  "version": "0.4.0",
+  "description": "Skills and tools that let Claude Code work on SAP through ARC-1: run reports with variants and read the ALV output, PDF preview of NAST print output, read/edit/replace SmartForms as XML.",
+  "author": { "name": "Silvio Marino" },
+  "repository": "https://github.com/silvius1996/claude-sap-kit",
+  "license": "MIT",
+  "keywords": ["sap", "abap", "arc-1", "smartforms", "alv", "mcp"]
+}

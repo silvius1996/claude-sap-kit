@@ -1,0 +1,12 @@
+{
+  "name": "claude-sap-kit",
+  "owner": { "name": "Silvio Marino" },
+  "metadata": { "description": "SAP tools for Claude Code built on ARC-1." },
+  "plugins": [
+    {
+      "name": "sap-arc1-kit",
+      "source": "./",
+      "description": "Run SAP reports, preview NAST print output as PDF and edit SmartForms as XML from Claude Code, through ARC-1."
+    }
+  ]
+}

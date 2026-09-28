@@ -1,0 +1,28 @@
+{
+  "name": "arc1-sap-tools",
+  "version": "0.4.0",
+  "description": "ARC-1 extension: run reports, NAST print preview as PDF, read/write and replace SmartForms as XML (via SOAP-RFC).",
+  "type": "module",
+  "main": "dist/index.js",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": "^22.19.0 || ^24.0.0"
+  },
+  "peerDependencies": {
+    "arc-1": ">=1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.8.0",
+    "zod": "^4.0.0"
+  },
+  "arc1": {
+    "apiVersion": 1,
+    "requires": { "scopes": ["write"], "packages": [] }
+  }
+}
