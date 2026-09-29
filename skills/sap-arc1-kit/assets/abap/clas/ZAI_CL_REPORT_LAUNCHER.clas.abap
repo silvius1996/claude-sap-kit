@@ -148,8 +148,9 @@ CLASS zai_cl_report_launcher IMPLEMENTATION.
     SELECT variant, aename AS changed_by, aedat AS changed_on
       FROM varid
       WHERE report = @iv_report
-      ORDER BY variant
       INTO CORRESPONDING FIELDS OF TABLE @rt_variants.
+    " Sorted here: ORDER BY in the SELECT would bypass the table buffer of VARID
+    SORT rt_variants BY variant.
 
     SELECT variant, vtext
       FROM varit

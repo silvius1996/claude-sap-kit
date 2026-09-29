@@ -73,11 +73,13 @@ pass its content unchanged.
 
 - `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<P>_%'` → the 5 entry
   FMs with `FMODE = 'R'`, `<P>_PRINT_CALL_ROUTINE` empty.
-- `SAPDiagnose unittest` on the 3 classes: no errors. Tests that find no suitable data on the
-  system (e.g. no BA00 message) end with a **tolerable warning** instead of failing: this is
-  expected, not a problem (`CL_ABAP_UNIT_ASSERT=>SKIP` does not exist on 7.50). Expected: 8 + 8 + 14
-  (in `ZAI_CL_SMARTFORM_XML` the author check test ends with a warning if the system has no
-  transportable Z*/Y* SmartForms of other users).
+- `SAPDiagnose unittest` on the 3 classes: 8 + 8 + 14 tests, no errors. Tests that find no
+  suitable data on the system end with a **tolerable** assertion (`CL_ABAP_UNIT_ASSERT=>SKIP`
+  does not exist on 7.50): ARC-1 then reports the class as `failed` with `severity: tolerable`.
+  This is expected, not a problem, when the message says what is missing:
+  "No BA00 message in this system", "No preview spool request below the TSP01 maximum" (normal
+  before the first `Custom_PrintPreview` on the system), "Output type V1/ZZZZ has a TNAPR entry
+  in this system", "No transportable Z*/Y* SmartForms of other users or no open request". Any other failure, or a `critical` one, is a real error.
 - `SAPDiagnose atc`: no priority 1/2 findings. Priority 3 findings on "texts without text
   element" are accepted (technical messages) unless the project rules say otherwise.
 - `Custom_SmartFormReplace` is tried only on a test Z form, in a transportable package and
