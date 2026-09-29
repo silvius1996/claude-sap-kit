@@ -6,6 +6,8 @@ built as an extension of [ARC-1](https://github.com/arc-mcp/arc-1).
 ARC-1 already gives Claude read and write access to ABAP code through ADT. This kit adds what
 ADT does not cover: running reports, previewing print output and editing SmartForms.
 
+⭐ **If you find it useful, please star the repo**: it helps other SAP developers find it. Questions and ideas are welcome in [Issues](https://github.com/silvius1996/claude-sap-kit/issues).
+
 ## What you can ask Claude
 
 - *"Run MB52 for plant 1001, storage locations M001 to M003"* → runs the report and reads the ALV as JSON.
