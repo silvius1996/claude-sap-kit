@@ -91,13 +91,16 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
                                                        iv_routine = iv_routine ) ).
 
     DATA(lv_title) = CONV nast-tdcovtitle( |{ gc_title_prefix } { sy-datum }{ sy-uzeit } { ls_nast-kschl }| ).
+    " Separate variable: on 7.50 CALL FUNCTION reads the IS_NAST of the nested method call
+    " as a second formal parameter IS_NAST and the class does not compile
+    DATA(ls_print_nast) = prepare_nast( is_nast   = ls_nast
+                                        iv_device = iv_device
+                                        iv_title  = lv_title ).
     DATA lv_returncode TYPE sysubrc.
 
     CALL FUNCTION 'ZAI_PRINT_CALL_ROUTINE'
       EXPORTING
-        is_nast       = prepare_nast( is_nast   = ls_nast
-                                      iv_device = iv_device
-                                      iv_title  = lv_title )
+        is_nast       = ls_print_nast
         is_tnapr      = ls_tnapr
       IMPORTING
         ev_returncode = lv_returncode.
@@ -239,7 +242,7 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
       WHERE rqowner = @sy-uname
         AND rqtitle = @iv_title
       ORDER BY rqident
-      INTO TABLE @rt_spools.                            "#EC CI_NOFIELD
+      INTO TABLE @rt_spools.                            "#EC CI_NOFIELD "#EC CI_NOFIRST
     IF sy-subrc <> 0.
       CLEAR rt_spools.
     ENDIF.

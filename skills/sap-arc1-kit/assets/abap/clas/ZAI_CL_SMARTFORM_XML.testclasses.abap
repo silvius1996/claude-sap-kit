@@ -207,7 +207,9 @@ CLASS ltc_smartform_xml IMPLEMENTATION.
     other_author_data( IMPORTING ev_form      = DATA(lv_form)
                                  ev_transport = DATA(lv_transport) ).
     IF lv_form IS INITIAL OR lv_transport IS INITIAL.
-      cl_abap_unit_assert=>skip( 'No transportable Z*/Y* SmartForms of other users or no open request' ).
+      cl_abap_unit_assert=>fail( msg   = 'No transportable Z*/Y* SmartForms of other users or no open request'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
 
     " Check active: refused with the logged-on user

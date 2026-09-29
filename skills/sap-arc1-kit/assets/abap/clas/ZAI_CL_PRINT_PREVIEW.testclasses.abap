@@ -2,7 +2,8 @@ CLASS ltc_print_preview DEFINITION DEFERRED.
 CLASS zai_cl_print_preview DEFINITION LOCAL FRIENDS ltc_print_preview.
 
 " Harmless tests: no printing, no writes. Cases that depend on system data
-" (BA00 messages, output types without TNAPR, existing spool requests) are skipped if missing.
+" (BA00 messages, existing spool requests) end with a tolerable failure if missing
+" (CL_ABAP_UNIT_ASSERT=>SKIP does not exist on 7.50).
 CLASS ltc_print_preview DEFINITION FINAL
   FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
 
@@ -42,7 +43,9 @@ CLASS ltc_print_preview IMPLEMENTATION.
       WHERE kappl = 'V1' AND kschl = 'BA00'
       INTO @DATA(lv_objky).
     IF sy-subrc <> 0.
-      cl_abap_unit_assert=>skip( 'No BA00 message in this system' ).
+      cl_abap_unit_assert=>fail( msg   = 'No BA00 message in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
     DATA(lv_short) = CONV nast-objky( |{ lv_objky ALPHA = OUT }| ).
 
@@ -57,23 +60,21 @@ CLASS ltc_print_preview IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD missing_config.
-    " A print message (medium 1) whose output type has no TNAPR entry
-    SELECT n~kappl, n~kschl, n~objky
-      FROM nast AS n
-      LEFT OUTER JOIN tnapr AS t ON  t~kappl = n~kappl
-                                 AND t~kschl = n~kschl
-                                 AND t~nacha = '1'
-      WHERE n~nacha = '1'
-        AND t~kschl IS NULL
-      INTO @DATA(ls_candidate)
-      UP TO 1 ROWS.
-    ENDSELECT.
-    IF sy-subrc <> 0.
-      cl_abap_unit_assert=>skip( 'No message without TNAPR in this system' ).
+    " An output type without TNAPR entry: READ_CONFIG uses only KAPPL/KSCHL, so no NAST record
+    " is needed (a join of NAST with TNAPR reads the whole NAST on systems with many messages)
+    SELECT SINGLE @abap_true FROM tnapr
+      WHERE kappl = 'V1'
+        AND kschl = 'ZZZZ'
+        AND nacha = '1'
+      INTO @DATA(lv_exists).
+    IF lv_exists = abap_true.
+      cl_abap_unit_assert=>fail( msg   = 'Output type V1/ZZZZ has a TNAPR entry in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
 
     TRY.
-        mo_cut->read_config( VALUE #( kappl = ls_candidate-kappl kschl = ls_candidate-kschl ) ).
+        mo_cut->read_config( VALUE #( kappl = 'V1' kschl = 'ZZZZ' ) ).
         cl_abap_unit_assert=>fail( 'Exception expected for an output type without TNAPR' ).
       CATCH zai_cx_print_preview INTO DATA(lx_error).
         cl_abap_unit_assert=>assert_char_cp( act = lx_error->get_text( )
@@ -111,7 +112,9 @@ CLASS ltc_print_preview IMPLEMENTATION.
       UP TO 1 ROWS.                                     "#EC CI_NOFIELD
     ENDSELECT.
     IF sy-subrc <> 0.
-      cl_abap_unit_assert=>skip( 'No preview spool request below the TSP01 maximum' ).
+      cl_abap_unit_assert=>fail( msg   = 'No preview spool request below the TSP01 maximum'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
 
     DATA(lt_spools) = mo_cut->find_spools( ls_spool-rqtitle ).
