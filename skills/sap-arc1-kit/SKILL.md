@@ -17,7 +17,7 @@ because ARC-1 extensions can only make HTTP calls.
 
 The sources are in `assets/` (`abap/clas`, `abap/fugr`, `arc1-extension`). They need
 SAP_BASIS 7.50 or later: ECC 6.0 EHP8 and every S/4HANA on-premise / private cloud release.
-They were tested live on S/4HANA 2025 (SAP_BASIS 816) and syntax-checked for 7.50; they avoid
+They were tested live on S/4HANA 2025 (SAP_BASIS 816) and ECC 6.0 EHP8 (SAP_BASIS 750); they avoid
 newer constructs on purpose (`RAISE EXCEPTION TYPE`, POSIX `REGEX` instead of `NEW` and PCRE).
 On ECC check before installing that the class `/UI2/CL_JSON` exists (used for the ALV output).
 
@@ -73,10 +73,11 @@ pass its content unchanged.
 
 - `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<P>_%'` → the 5 entry
   FMs with `FMODE = 'R'`, `<P>_PRINT_CALL_ROUTINE` empty.
-- `SAPDiagnose unittest` on the 3 classes: all green or skipped (tests skip themselves when the
-  system has no suitable data, e.g. no BA00 message). Expected: 8 + 8 + 14 (in
-  `ZAI_CL_SMARTFORM_XML` the author check test is skipped if the system has no transportable
-  Z*/Y* SmartForms of other users).
+- `SAPDiagnose unittest` on the 3 classes: no errors. Tests that find no suitable data on the
+  system (e.g. no BA00 message) end with a **tolerable warning** instead of failing: this is
+  expected, not a problem (`CL_ABAP_UNIT_ASSERT=>SKIP` does not exist on 7.50). Expected: 8 + 8 + 14
+  (in `ZAI_CL_SMARTFORM_XML` the author check test ends with a warning if the system has no
+  transportable Z*/Y* SmartForms of other users).
 - `SAPDiagnose atc`: no priority 1/2 findings. Priority 3 findings on "texts without text
   element" are accepted (technical messages) unless the project rules say otherwise.
 - `Custom_SmartFormReplace` is tried only on a test Z form, in a transportable package and

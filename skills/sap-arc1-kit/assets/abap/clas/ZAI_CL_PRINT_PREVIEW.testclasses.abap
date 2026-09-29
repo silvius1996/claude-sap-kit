@@ -2,7 +2,8 @@ CLASS ltc_print_preview DEFINITION DEFERRED.
 CLASS zai_cl_print_preview DEFINITION LOCAL FRIENDS ltc_print_preview.
 
 " Harmless tests: no printing, no writes. Cases that depend on system data
-" (BA00 messages, output types without TNAPR, existing spool requests) are skipped if missing.
+" (BA00 messages, output types without TNAPR, existing spool requests) end with a tolerable
+" warning if missing (CL_ABAP_UNIT_ASSERT=>SKIP does not exist on 7.50).
 CLASS ltc_print_preview DEFINITION FINAL
   FOR TESTING RISK LEVEL HARMLESS DURATION SHORT.
 
@@ -42,7 +43,9 @@ CLASS ltc_print_preview IMPLEMENTATION.
       WHERE kappl = 'V1' AND kschl = 'BA00'
       INTO @DATA(lv_objky).
     IF sy-subrc <> 0.
-      cl_abap_unit_assert=>skip( 'No BA00 message in this system' ).
+      cl_abap_unit_assert=>fail( msg   = 'No BA00 message in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
     DATA(lv_short) = CONV nast-objky( |{ lv_objky ALPHA = OUT }| ).
 
@@ -69,7 +72,9 @@ CLASS ltc_print_preview IMPLEMENTATION.
       UP TO 1 ROWS.
     ENDSELECT.
     IF sy-subrc <> 0.
-      cl_abap_unit_assert=>skip( 'No message without TNAPR in this system' ).
+      cl_abap_unit_assert=>fail( msg   = 'No message without TNAPR in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
 
     TRY.
@@ -111,7 +116,9 @@ CLASS ltc_print_preview IMPLEMENTATION.
       UP TO 1 ROWS.                                     "#EC CI_NOFIELD
     ENDSELECT.
     IF sy-subrc <> 0.
-      cl_abap_unit_assert=>skip( 'No preview spool request below the TSP01 maximum' ).
+      cl_abap_unit_assert=>fail( msg   = 'No preview spool request below the TSP01 maximum'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
     ENDIF.
 
     DATA(lt_spools) = mo_cut->find_spools( ls_spool-rqtitle ).
