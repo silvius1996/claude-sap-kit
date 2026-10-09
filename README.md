@@ -95,6 +95,34 @@ The kit is designed to be safe even when an AI is driving it:
 - nothing is ever deleted;
 - the skills ask for confirmation before running reports or print programs that change data.
 
+## Business data and the model
+
+What a tool returns goes into Claude's context, and from there to the model provider under your
+agreement with them. The tools are not equal from this point of view:
+
+| Tool | What reaches the model |
+|---|---|
+| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace` | Form definitions: layout, texts and code. Customer code, but no business documents |
+| `Custom_LaunchReport` | **Business data**: the report output (ALV rows or list), for example stock, prices, customers |
+| `Custom_PrintPreview` | **Business data**: the printed document, with addresses, prices and quantities. The PDF is saved locally and reaches the model when Claude reads or compares it, as the skills do to check a form |
+
+Test systems are often copies of production, so "only development and test systems" does not keep
+real data out. Decide per system and per customer:
+
+- where business data must not leave the system, keep the report and preview tools off, for example
+  with a deny rule in the project's `.claude/settings.json` (`arc1` is the name of the ARC-1 server
+  in `.mcp.json`):
+  ```json
+  {
+    "permissions": {
+      "deny": ["mcp__arc1__Custom_LaunchReport", "mcp__arc1__Custom_PrintPreview"]
+    }
+  }
+  ```
+  With ARC-1 in read-only mode all the kit tools are off, because they need writes enabled;
+- where the customer accepts it, keep selections narrow (one material and plant, not the whole stock),
+  so that only the data needed for the task is read.
+
 ## Limits
 
 - Print output with NAST messages only: no S/4 Output Management (BRF+/APOC).
