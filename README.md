@@ -1,5 +1,7 @@
 # claude-sap-kit
 
+[![Listed in SAP AI MCP Servers & Claude Plugins](https://img.shields.io/badge/listed%20in-SAP%20AI%20MCP%20Servers%20%26%20Claude%20Plugins-0a6ed1)](https://github.com/marianfoo/sap-ai-mcp-servers#community-sap-ai-skills--claude-plugins)
+
 Tools and skills that let **Claude Code** work on an **on-premise SAP system** without SAP GUI,
 built as an extension of [ARC-1](https://github.com/arc-mcp/arc-1).
 
@@ -138,6 +140,12 @@ npm test
 ```
 
 The ABAP classes come with ABAP Unit tests: the installation skill runs them on the system.
+
+## Featured in
+
+- [SAP MCP Servers, SAP AI Skills, and Claude Plugins](https://github.com/marianfoo/sap-ai-mcp-servers#community-sap-ai-skills--claude-plugins)
+  by Marian Zeis, under *Community SAP AI Skills & Claude Plugins*
+  ([interactive catalog](https://sap-ai-tools.marianzeis.de/)).
 
 ## License
 
