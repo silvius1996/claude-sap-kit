@@ -15,11 +15,28 @@ installation, `ZAI` by default):
 | `Custom_PrintPreview(document, outputType, application?, form?, program?, routine?)` | Runs the print program of the NAST message to spool (without printing) and saves the PDF in `output/print-preview/` |
 | `Custom_SmartFormReplace(action, original, copy, transport, token?)` | Replaces the customer form `Z*`/`Y*` with the approved `<PREFIX>_*` copy, under the given request. `prepare`: XML backup of the original + summary + token, no writes. `execute`: with the token; refused if the original or the copy changed after `prepare` |
 
+They are ARC-1 tools, named here by their short name: in Claude Code they are
+`mcp__<server>__<tool>`, where `<server>` is the ARC-1 server of the target system in
+`.mcp.json` (e.g. `mcp__arc1__Custom_SmartFormRead`; the same for `SAPQuery`, `SAPTransport`, `SAPManage`).
+
 Intended constraints of the kit: changes are made only on copies with the kit prefix, in
 `$TMP`, created by the current user; nothing is ever deleted. Standard forms are never touched;
 project forms only with `Custom_SmartFormReplace`, after explicit confirmation by the user.
 
 ## Workflow
+
+Copy this checklist into your answer and tick it off as you go:
+
+```
+SmartForms change:
+- [ ] 1 Form and print program found
+- [ ] 2 Reference preview of the current form
+- [ ] 3 <PREFIX>_* copy created and read back
+- [ ] 4 Copy preview identical to the reference
+- [ ] 5 Change made, preview differs only where intended
+- [ ] 6 Hand-over: where to see it, how to roll back
+- [ ] 7 Original replaced (only if the user asked, after explicit OK)
+```
 
 1. **Find the form and print program** of the document. From `TNAPR` (output type, medium 1):
    `SAPQuery: SELECT kappl, kschl, pgnam, ronam, sform FROM tnapr WHERE kschl = '<TYPE>' AND nacha = '1'`.
@@ -31,10 +48,17 @@ project forms only with `Custom_SmartFormReplace`, after explicit confirmation b
    `<PREFIX>_...` name on the same file. Read the copy back: apart from name, internal node IDs
    and administrative data, the XML must be the same.
 4. **Check the copy**: `Custom_PrintPreview` with `form=<copy>`, `program`, `routine`.
-   The PDF must be identical to the one from step 2 (`scripts/pdf_text_diff.py`).
+   The PDF must be identical to the one from step 2. Run the comparison script (needs
+   `pip install pypdf`):
+   ```bash
+   python "${CLAUDE_SKILL_DIR}/scripts/pdf_text_diff.py" <reference.pdf> <copy.pdf>
+   ```
+   It prints "Identical text" (exit code 0) or the different lines (exit code 1). If the copy
+   differs, find the cause in the XML before going on.
 5. **Change**: copy the XML to a new file and change only what is needed (see below),
-   then `Custom_SmartFormWrite`, preview and compare with the reference: only what was meant
-   to change should change.
+   then `Custom_SmartFormWrite`, preview and compare with the reference using the same script:
+   only what was meant to change should change. If something else changed, fix the XML and
+   repeat.
 6. **Hand-over**: tell the user where to see the result (PDF sent, spool in `SP01` with title
    `Claude preview ...`, form in transaction `SMARTFORMS` in display mode) and how to roll back
    (upload the backup file again).

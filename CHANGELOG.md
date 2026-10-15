@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.2
+
+Skills reviewed against Anthropic's skill authoring best practices. No change to the tools or the ABAP sources.
+
+- Script paths use `${CLAUDE_SKILL_DIR}`, so `set_prefix.py` and `pdf_text_diff.py` are found wherever the plugin
+  is installed (before: a `<skill>` placeholder and a path relative to the skill folder).
+- ARC-1 tools are explained with their full Claude Code name (`mcp__<server>__<tool>`), to pick the right server
+  when several are configured.
+- `pdf_text_diff.py`: `pypdf` is listed in the skill; a missing package, a missing file or an unreadable PDF now
+  end with a clear message and exit code 2.
+- Checklists to copy for the installation and for a SmartForms change; the PDF comparison is an explicit loop
+  (compare, fix, repeat).
+- One placeholder for the prefix (`<PREFIX>`); test history moved out of the installation skill.
+- `evals/`: three cases for `claude plugin eval` (narrow report filters, copy before changing a form, checks before
+  installing). With the plugin 1.00 on all three, without 0.00.
+- Extension version aligned with the plugin (`index.ts` and `package.json` said 0.5.0).
+
 ## 0.5.1
 
 - Fix: the ABAP Unit test classes of `ZAI_CL_PRINT_PREVIEW` and `ZAI_CL_SMARTFORM_XML` did not compile

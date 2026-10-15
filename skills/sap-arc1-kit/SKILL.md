@@ -17,9 +17,25 @@ because ARC-1 extensions can only make HTTP calls.
 
 The sources are in `assets/` (`abap/clas`, `abap/fugr`, `arc1-extension`). They need
 SAP_BASIS 7.50 or later: ECC 6.0 EHP8 and every S/4HANA on-premise / private cloud release.
-They were tested live on S/4HANA 2025 (SAP_BASIS 816) and ECC 6.0 EHP8 (SAP_BASIS 750); they avoid
-newer constructs on purpose (`RAISE EXCEPTION TYPE`, POSIX `REGEX` instead of `NEW` and PCRE).
+They avoid newer constructs on purpose (`RAISE EXCEPTION TYPE`, POSIX `REGEX` instead of `NEW` and PCRE).
 On ECC check before installing that the class `/UI2/CL_JSON` exists (used for the ALV output).
+
+ARC-1 tools are named here by their short name (`SAPWrite`, `SAPActivate`, `SAPQuery`,
+`SAPDiagnose`); in Claude Code they are `mcp__<server>__<tool>`, where `<server>` is the name of
+the ARC-1 server in `.mcp.json` (e.g. `mcp__arc1__SAPWrite`). If several ARC-1 servers are
+configured, use the one of the target system and never a test or production one.
+
+Copy this checklist into your answer and tick it off as you go:
+
+```
+Kit installation:
+- [ ] Before starting: rules, prefix, package, ARC-1 writes, SICF, authorizations
+- [ ] Step 1: sources prepared with the prefix
+- [ ] Step 2: ABAP objects created, activated (FMs listed explicitly), tests uploaded
+- [ ] Step 3: TFDIR, ABAP Unit, ATC checked
+- [ ] Step 4: extension built and tested, .mcp.json updated, Claude Code restarted
+- [ ] Step 5: quick test of the tools
+```
 
 ## Before starting: what to ask or check
 
@@ -41,28 +57,30 @@ On ECC check before installing that the class `/UI2/CL_JSON` exists (used for th
 ## Step 1 — Prepare the sources with the chosen prefix
 
 ```bash
-python <skill>/scripts/set_prefix.py --to ZAI --dest <project>/sap-kit
+python "${CLAUDE_SKILL_DIR}/scripts/set_prefix.py" --to ZAI --dest <project>/sap-kit
 ```
 
-The script copies `assets/` and replaces the prefix in file names and content
-(ABAP and TypeScript), upper and lower case. With `--to ZAI` it only copies.
+The script (Python 3, standard library only) copies `assets/` and replaces the prefix in file
+names and content (ABAP and TypeScript), upper and lower case. With `--to ZAI` it only copies.
+It refuses a prefix that does not start with Z/Y or is longer than 10 characters, and a target
+folder that is not empty.
 
 ## Step 2 — ABAP objects (order matters)
 
 Use `SAPWrite` with the chosen `package` (and `transport` if not `$TMP`). Read each file and
 pass its content unchanged.
 
-1. **Exception classes** `<P>_CX_LAUNCHER`, `<P>_CX_PRINT_PREVIEW`, `<P>_CX_SMARTFORM`
+1. **Exception classes** `<PREFIX>_CX_LAUNCHER`, `<PREFIX>_CX_PRINT_PREVIEW`, `<PREFIX>_CX_SMARTFORM`
    → `SAPWrite batch_create` with `activateAtEnd: true`.
-2. **Function group** `<P>_FG_LAUNCHER` → `SAPWrite create type=FUGR`.
-3. **Include** `L<P>_FG_LAUNCHERF01` (work areas `TABLES: nast, tnapr`) →
-   `SAPWrite create type=INCL group=<P>_FG_LAUNCHER`. ARC-1 adds the `INCLUDE` line to the
+2. **Function group** `<PREFIX>_FG_LAUNCHER` → `SAPWrite create type=FUGR`.
+3. **Include** `L<PREFIX>_FG_LAUNCHERF01` (work areas `TABLES: nast, tnapr`) →
+   `SAPWrite create type=INCL group=<PREFIX>_FG_LAUNCHER`. ARC-1 adds the `INCLUDE` line to the
    main program by itself.
-4. **FM** `<P>_PRINT_CALL_ROUTINE` → `type=FUNC`, `processingType: normal`.
-5. **Classes** `<P>_CL_REPORT_LAUNCHER`, `<P>_CL_PRINT_PREVIEW`, `<P>_CL_SMARTFORM_XML`
+4. **FM** `<PREFIX>_PRINT_CALL_ROUTINE` → `type=FUNC`, `processingType: normal`.
+5. **Classes** `<PREFIX>_CL_REPORT_LAUNCHER`, `<PREFIX>_CL_PRINT_PREVIEW`, `<PREFIX>_CL_SMARTFORM_XML`
    (files `.clas.abap`) → `SAPWrite create type=CLAS`.
-6. **Remote-enabled FMs** `<P>_RUN_REPORT`, `<P>_RUN_PRINT_PREVIEW`, `<P>_SMARTFORM_READ`,
-   `<P>_SMARTFORM_WRITE`, `<P>_SMARTFORM_REPLACE` → `type=FUNC`, `processingType: rfc`.
+6. **Remote-enabled FMs** `<PREFIX>_RUN_REPORT`, `<PREFIX>_RUN_PRINT_PREVIEW`, `<PREFIX>_SMARTFORM_READ`,
+   `<PREFIX>_SMARTFORM_WRITE`, `<PREFIX>_SMARTFORM_REPLACE` → `type=FUNC`, `processingType: rfc`.
 7. **One activation** with `SAPActivate objects=[...]` of: the 3 classes, the include, the 6 FUNC
    (with `group`) and the FUGR. New FMs stay inactive if only the FUGR is activated: they must
    be listed explicitly.
@@ -71,8 +89,8 @@ pass its content unchanged.
 
 ## Step 3 — Checks on the system
 
-- `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<P>_%'` → the 5 entry
-  FMs with `FMODE = 'R'`, `<P>_PRINT_CALL_ROUTINE` empty.
+- `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 5 entry
+  FMs with `FMODE = 'R'`, `<PREFIX>_PRINT_CALL_ROUTINE` empty.
 - `SAPDiagnose unittest` on the 3 classes: 8 + 8 + 14 tests, no errors. Tests that find no
   suitable data on the system end with a **tolerable** assertion (`CL_ABAP_UNIT_ASSERT=>SKIP`
   does not exist on 7.50): ARC-1 then reports the class as `failed` with `severity: tolerable`.
@@ -82,11 +100,8 @@ pass its content unchanged.
   in this system", "No transportable Z*/Y* SmartForms of other users or no open request". Any other failure, or a `critical` one, is a real error.
 - `SAPDiagnose atc`: no priority 1/2 findings. Priority 3 findings on "texts without text
   element" are accepted (technical messages) unless the project rules say otherwise.
-- `Custom_SmartFormReplace` is tried only on a test Z form, in a transportable package and
-  with a transport request given by the user (tested on S/4HANA 2025: `prepare` + `execute`
-  successful, form recorded in the request without popup via RFC).
-  There is no need to repeat the test on every system: a `prepare` and the user's confirmation
-  before the first real `execute` are enough.
+- `Custom_SmartFormReplace` is not tested at installation: before its first real `execute` on a
+  system, a `prepare` and the user's explicit confirmation are enough.
 
 ## Step 4 — ARC-1 extension
 
@@ -108,8 +123,8 @@ pass its content unchanged.
    |---|---|---|
    | `SAP_ALLOW_TRANSPORT_WRITES` | Must be `true`, otherwise the tool refuses | - |
    | `SAP_ALLOWED_PACKAGES` | Packages in which an original can be replaced | empty = none |
-   | `<P>_CHECK_AUTHOR` | Check done in ABAP with the user actually logged on (`sy-uname`); `false` on systems with a shared SAP user, where the author does not tell who wrote the form | `true` |
-   | `<P>_ALLOWED_TRANSPORTS` | Allowed transport requests, comma separated | all modifiable workbench requests |
+   | `<PREFIX>_CHECK_AUTHOR` | Check done in ABAP with the user actually logged on (`sy-uname`); `false` on systems with a shared SAP user, where the author does not tell who wrote the form | `true` |
+   | `<PREFIX>_ALLOWED_TRANSPORTS` | Allowed transport requests, comma separated | all modifiable workbench requests |
 4. Ask the user to **restart Claude Code** (or reconnect the ARC-1 server): the tools appear
    only afterwards. Then `ToolSearch` with `Custom_` to check them.
 

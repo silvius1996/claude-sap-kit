@@ -10,6 +10,10 @@ The tool `Custom_LaunchReport` does a `SUBMIT` of the report on the system, capt
 returns the text. If the tool is missing, the kit is not installed on this system: use the
 skill `sap-arc1-kit`.
 
+The tools are ARC-1 tools, named here by their short name: in Claude Code they are
+`mcp__<server>__<tool>`, where `<server>` is the ARC-1 server of the target system in
+`.mcp.json` (e.g. `mcp__arc1__Custom_LaunchReport`, `mcp__arc1__SAPRead`, `mcp__arc1__SAPQuery`).
+
 ## When it is the right choice
 
 - Checking what a report produces with some filters, or after a change.
