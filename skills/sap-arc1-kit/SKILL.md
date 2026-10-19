@@ -1,6 +1,6 @@
 ---
 name: sap-arc1-kit
-description: Installs on an SAP system (on-premise, through the ARC-1 MCP server) the tool kit that lets Claude run reports with variants/selection values and read the ALV output, create PDF previews of NAST print output, read and edit SmartForms as XML, and replace a customer form with the approved copy. Use it when starting a new SAP project and the tools Custom_LaunchReport, Custom_PrintPreview, Custom_SmartFormRead/Write/Replace are not available, when the user asks to "install/port the tools", "prepare the system", "set up the report launcher or SmartForms tools" on a new system or client, or when the skills sap-report-launcher / sap-smartform-xml report that the tools are missing.
+description: Installs on an SAP system (on-premise, through the ARC-1 MCP server) the tool kit that lets Claude run reports with variants/selection values and read the ALV output, create PDF previews of NAST print output, read and edit SmartForms as XML, replace a customer form with the approved copy, and read and copy Adobe forms (SFP) as XML + XDP. Use it when starting a new SAP project and the tools Custom_LaunchReport, Custom_PrintPreview, Custom_SmartFormRead/Write/Replace, Custom_AdobeFormRead/Write are not available, when the user asks to "install/port the tools", "prepare the system", "set up the report launcher or SmartForms tools" on a new system or client, or when the skills sap-report-launcher / sap-smartform-xml / sap-adobe-form report that the tools are missing.
 ---
 
 # ARC-1 kit: installation on a new SAP system
@@ -9,8 +9,8 @@ The kit has two parts that are installed together:
 
 | Part | Where | Content (default prefix `ZAI`) |
 |---|---|---|
-| ABAP | SAP system | 3 exception classes, 3 logic classes, function group `ZAI_FG_LAUNCHER` with 6 function modules (5 remote-enabled) |
-| ARC-1 extension | PC, project folder | 5 MCP tools: `Custom_LaunchReport`, `Custom_PrintPreview`, `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace` |
+| ABAP | SAP system | 4 exception classes, 4 logic classes, function group `ZAI_FG_LAUNCHER` with 8 function modules (7 remote-enabled) |
+| ARC-1 extension | PC, project folder | 7 MCP tools: `Custom_LaunchReport`, `Custom_PrintPreview`, `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite` |
 
 The tools call the function modules through the standard SOAP-RFC service (`/sap/bc/soap/rfc`),
 because ARC-1 extensions can only make HTTP calls.
@@ -53,6 +53,8 @@ Kit installation:
    HTTP 403/404 if the service is off.
 6. **SAP user authorizations**: `S_RFC` on the function group, plus those needed to run the
    reports and read spool requests.
+7. **Adobe Document Services (ADS)**, only for the Adobe forms tools: without ADS they read forms
+   but do not write them, and Adobe print output cannot be previewed. Manual check: report `FP_TEST_00`.
 
 ## Step 1 — Prepare the sources with the chosen prefix
 
@@ -70,34 +72,39 @@ folder that is not empty.
 Use `SAPWrite` with the chosen `package` (and `transport` if not `$TMP`). Read each file and
 pass its content unchanged.
 
-1. **Exception classes** `<PREFIX>_CX_LAUNCHER`, `<PREFIX>_CX_PRINT_PREVIEW`, `<PREFIX>_CX_SMARTFORM`
+1. **Exception classes** `<PREFIX>_CX_LAUNCHER`, `<PREFIX>_CX_PRINT_PREVIEW`, `<PREFIX>_CX_SMARTFORM`,
+   `<PREFIX>_CX_ADOBE_FORM`
    → `SAPWrite batch_create` with `activateAtEnd: true`.
 2. **Function group** `<PREFIX>_FG_LAUNCHER` → `SAPWrite create type=FUGR`.
 3. **Include** `L<PREFIX>_FG_LAUNCHERF01` (work areas `TABLES: nast, tnapr`) →
    `SAPWrite create type=INCL group=<PREFIX>_FG_LAUNCHER`. ARC-1 adds the `INCLUDE` line to the
    main program by itself.
 4. **FM** `<PREFIX>_PRINT_CALL_ROUTINE` → `type=FUNC`, `processingType: normal`.
-5. **Classes** `<PREFIX>_CL_REPORT_LAUNCHER`, `<PREFIX>_CL_PRINT_PREVIEW`, `<PREFIX>_CL_SMARTFORM_XML`
-   (files `.clas.abap`) → `SAPWrite create type=CLAS`.
+5. **Classes** `<PREFIX>_CL_REPORT_LAUNCHER`, `<PREFIX>_CL_PRINT_PREVIEW`, `<PREFIX>_CL_SMARTFORM_XML`,
+   `<PREFIX>_CL_ADOBE_FORM` (files `.clas.abap`) → `SAPWrite create type=CLAS`.
 6. **Remote-enabled FMs** `<PREFIX>_RUN_REPORT`, `<PREFIX>_RUN_PRINT_PREVIEW`, `<PREFIX>_SMARTFORM_READ`,
-   `<PREFIX>_SMARTFORM_WRITE`, `<PREFIX>_SMARTFORM_REPLACE` → `type=FUNC`, `processingType: rfc`.
-7. **One activation** with `SAPActivate objects=[...]` of: the 3 classes, the include, the 6 FUNC
+   `<PREFIX>_SMARTFORM_WRITE`, `<PREFIX>_SMARTFORM_REPLACE`, `<PREFIX>_ADOBE_FORM_READ`,
+   `<PREFIX>_ADOBE_FORM_WRITE` → `type=FUNC`, `processingType: rfc`.
+7. **One activation** with `SAPActivate objects=[...]` of: the 4 classes, the include, the 8 FUNC
    (with `group`) and the FUGR. New FMs stay inactive if only the FUGR is activated: they must
    be listed explicitly.
 8. **Tests** (`.testclasses.abap`) → `SAPWrite update include=testclasses` for each class,
-   then `SAPActivate` of the 3 classes.
+   then `SAPActivate` of the 4 classes.
 
 ## Step 3 — Checks on the system
 
-- `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 5 entry
+- `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 7 entry
   FMs with `FMODE = 'R'`, `<PREFIX>_PRINT_CALL_ROUTINE` empty.
-- `SAPDiagnose unittest` on the 3 classes: 8 + 8 + 14 tests, no errors. Tests that find no
+- `SAPDiagnose unittest` on the 4 classes: 8 (report launcher) + 10 (print preview) + 14 (SmartForms)
+  + 9 (Adobe forms) tests, no errors. Tests that find no
   suitable data on the system end with a **tolerable** assertion (`CL_ABAP_UNIT_ASSERT=>SKIP`
   does not exist on 7.50): ARC-1 then reports the class as `failed` with `severity: tolerable`.
   This is expected, not a problem, when the message says what is missing:
   "No BA00 message in this system", "No preview spool request below the TSP01 maximum" (normal
   before the first `Custom_PrintPreview` on the system), "Output type V1/ZZZZ has a TNAPR entry
-  in this system", "No transportable Z*/Y* SmartForms of other users or no open request". Any other failure, or a `critical` one, is a real error.
+  in this system", "No transportable Z*/Y* SmartForms of other users or no open request",
+  "Standard Adobe form FP_TEST_00 not found in this system", "ADS not available in this system: ..."
+  (the Adobe forms tools then only read). Any other failure, or a `critical` one, is a real error.
 - `SAPDiagnose atc`: no priority 1/2 findings. Priority 3 findings on "texts without text
   element" are accepted (technical messages) unless the project rules say otherwise.
 - `Custom_SmartFormReplace` is not tested at installation: before its first real `execute` on a
@@ -106,7 +113,7 @@ pass its content unchanged.
 ## Step 4 — ARC-1 extension
 
 1. Copy `sap-kit/arc1-extension` into the project folder (e.g. `<project>/arc1-extension`).
-2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 20 Node tests).
+2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 25 Node tests).
    `--ignore-scripts` skips the native build of ARC-1 dependencies, which the extension does
    not need.
 3. In `.mcp.json`, in the ARC-1 server, add to `env`:
@@ -132,6 +139,7 @@ pass its content unchanged.
 
 - `Custom_LaunchReport` with `tcode: "MB52"` (or a Z report of the project) and a narrow filter.
 - `Custom_SmartFormRead` on `LE_SHP_DELNOTE` or a project form → XML saved.
+- `Custom_AdobeFormRead` on `FP_TEST_00` or a project Adobe form → form XML, XDP and interface saved.
 - `Custom_PrintPreview` on a document with a NAST print message → PDF saved.
 
 Then record prefix, package, created objects and results in the project notes.
@@ -146,4 +154,4 @@ Then record prefix, package, created objects and results in the project notes.
 | `Custom_*` tools missing | Extension not built, wrong `ARC1_PLUGINS` path or Claude Code not restarted |
 | After a prefix change the tools call FMs that do not exist | Rebuild the extension (`npm test`) from the copy with the new prefix |
 
-To use the tools: skills `sap-report-launcher` and `sap-smartform-xml`.
+To use the tools: skills `sap-report-launcher`, `sap-smartform-xml` and `sap-adobe-form`.

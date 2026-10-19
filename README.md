@@ -6,7 +6,7 @@ Tools and skills that let **Claude Code** work on an **on-premise SAP system** w
 built as an extension of [ARC-1](https://github.com/arc-mcp/arc-1).
 
 ARC-1 already gives Claude read and write access to ABAP code through ADT. This kit adds what
-ADT does not cover: running reports, previewing print output and editing SmartForms.
+ADT does not cover: running reports, previewing print output and editing SmartForms and Adobe forms.
 
 ⭐ **If you find it useful, please star the repo**: it helps other SAP developers find it. Questions and ideas are welcome in [Issues](https://github.com/silvius1996/claude-sap-kit/issues).
 
@@ -19,20 +19,24 @@ ADT does not cover: running reports, previewing print output and editing SmartFo
   XML edit, PDF preview and comparison with the original.
 - *"OK, move the change to the original form in request DEVK900123"* → controlled replacement, with backup,
   summary and explicit confirmation.
+- *"On the order confirmation (Adobe form), make the footer text smaller"* → Z copy of the form, XDP edit,
+  PDF preview and comparison with the original.
 
 ## How it works
 
 ```
-Claude Code ──MCP──▶ ARC-1 ──▶ extension (5 Custom_* tools) ──HTTP /sap/bc/soap/rfc──▶ remote-enabled FMs ZAI_* ──▶ ABAP classes
+Claude Code ──MCP──▶ ARC-1 ──▶ extension (7 Custom_* tools) ──HTTP /sap/bc/soap/rfc──▶ remote-enabled FMs ZAI_* ──▶ ABAP classes
 ```
 
 | Tool | What it does |
 |---|---|
 | `Custom_LaunchReport` | `SUBMIT` of a report (by name or transaction) with a variant and/or selection values; returns the ALV as JSON or the list as text |
-| `Custom_PrintPreview` | Runs the print program of a NAST message to spool and saves the PDF, even with a form not yet configured in NACE |
+| `Custom_PrintPreview` | Runs the print program of a NAST message to spool and saves the PDF, even with a SmartForms or Adobe form not yet configured in NACE |
 | `Custom_SmartFormRead` | Downloads the XML of any SmartForms |
 | `Custom_SmartFormWrite` | Uploads an XML as a `ZAI_*` copy in `$TMP`, with check, activation and FM generation |
 | `Custom_SmartFormReplace` | Replaces a customer form with the approved copy, under a transport request, in two steps (`prepare` → `execute`) |
+| `Custom_AdobeFormRead` | Downloads any Adobe form (SFP) as three files: form XML without layout, layout XDP, interface XML |
+| `Custom_AdobeFormWrite` | Uploads form XML + XDP as a `ZAI_*` copy in `$TMP`, with activation and FM generation |
 
 ARC-1 extensions can only make HTTP calls, so the tools call remote-enabled function modules
 through the standard SOAP-RFC service.
@@ -48,6 +52,7 @@ skills/
     scripts/set_prefix.py        changes the object prefix (e.g. ZAI → ZXYZ)
   sap-report-launcher/           skill: how to run and compare reports
   sap-smartform-xml/             skill: how to read, edit and check SmartForms
+  sap-adobe-form/                skill: how to read, copy, edit and check Adobe forms
 ```
 
 ## Requirements
@@ -58,12 +63,13 @@ skills/
   Not for S/4HANA Public Cloud or the BTP ABAP Environment (no `SUBMIT`, NAST or SOAP-RFC there).
 - [ARC-1](https://github.com/arc-mcp/arc-1) 1.4.0 or later, configured in Claude Code with writes enabled.
 - SICF service `/sap/bc/soap/rfc` active.
+- For the Adobe forms tools: Adobe Document Services (ADS) configured (standard report `FP_TEST_00`).
 - SAP user with `S_RFC` on the kit function group, plus the authorizations for the reports to run and for spool requests.
 - Node.js 22.19+ or 24 (to build the extension) and Python 3 (for the scripts).
 
 ## Installation
 
-1. **Plugin** (the three skills), from Claude Code:
+1. **Plugin** (the four skills), from Claude Code:
    ```
    /plugin marketplace add silvius1996/claude-sap-kit
    /plugin install sap-arc1-kit@claude-sap-kit
@@ -89,12 +95,13 @@ Minimal extension configuration in the ARC-1 server of `.mcp.json`:
 The kit is designed to be safe even when an AI is driving it:
 
 - standard SAP objects are never changed;
-- SmartForms are written only as copies with the kit prefix, in `$TMP`, created by the logged-on user;
-  every overwrite first saves an XML backup;
+- SmartForms and Adobe forms are written only as copies with the kit prefix, in `$TMP`, created by the
+  logged-on user; every overwrite first saves a local backup;
 - replacing a customer form needs a transport request given by the user, a `prepare` step with a summary
   and a one-time token, and is refused if the original or the copy changed in the meantime;
 - allowed packages, allowed requests and the author check are configured in the project `.mcp.json`;
-- nothing is ever deleted;
+- nothing is ever deleted, with one exception: SAP has no API to update an Adobe form, so an existing
+  `ZAI_*` copy (own, in `$TMP`) is deleted and created again after its backup;
 - the skills ask for confirmation before running reports or print programs that change data.
 
 ## Business data and the model
@@ -104,7 +111,7 @@ agreement with them. The tools are not equal from this point of view:
 
 | Tool | What reaches the model |
 |---|---|
-| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace` | Form definitions: layout, texts and code. Customer code, but no business documents |
+| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite` | Form definitions: layout, texts and code. Customer code, but no business documents |
 | `Custom_LaunchReport` | **Business data**: the report output (ALV rows or list), for example stock, prices, customers |
 | `Custom_PrintPreview` | **Business data**: the printed document, with addresses, prices and quantities. The PDF is saved locally and reaches the model when Claude reads or compares it, as the skills do to check a form |
 
@@ -128,7 +135,9 @@ real data out. Decide per system and per customer:
 ## Limits
 
 - Print output with NAST messages only: no S/4 Output Management (BRF+/APOC).
-- Editing is for SmartForms only. Adobe Forms and SAPscript can be previewed but not edited.
+- Editing: SmartForms (copies and replacement of the original) and Adobe forms (copies only: replacing
+  the original is not available yet). SAPscript can be previewed but not edited.
+- Adobe forms: the interface is read only.
 - Reports that open popups, `CALL SCREEN` or dialog transactions cannot be run.
 
 ## Tests

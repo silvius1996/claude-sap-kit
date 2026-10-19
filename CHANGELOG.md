@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.6.0 (not released yet: to be tested live)
+
+Adobe forms (Interactive Forms by Adobe, transaction SFP).
+
+- `Custom_AdobeFormRead`: downloads any Adobe form as three files, as abapGit does: the form XML without layout
+  (`<NAME>.form.xml`, one element per line), the layout as XDP (`<NAME>.xdp`) and the form interface
+  (`<INTERFACE>.interface.xml`, found in the form XML or passed explicitly).
+- `Custom_AdobeFormWrite`: uploads form XML + XDP as a `ZAI_*` copy in `$TMP` of the logged-on user, activates it and
+  returns the generated function module. Checks Adobe Document Services (ADS) first. SAP has no API to update a form
+  (abapGit deletes and creates it again too), so an existing copy is deleted and created again after a local backup;
+  customer and standard forms are never written.
+- `Custom_PrintPreview`: `form` also accepts an active Adobe form; the form type comes from the TNAPR entry of the
+  output type when its form is of the same kind.
+- New ABAP objects `ZAI_CL_ADOBE_FORM`, `ZAI_CX_ADOBE_FORM` and the remote-enabled FMs `ZAI_ADOBE_FORM_READ`,
+  `ZAI_ADOBE_FORM_WRITE`; 9 ABAP Unit tests (harmless) for the new class, 2 more for the preview.
+- New skill `sap-adobe-form`: workflow copy → preview → change → compare, how to find one's way in the XDP and in the
+  context, errors and limits. Replacing the original form under a transport request is not part of this version.
+
 ## 0.5.2
 
 Skills reviewed against Anthropic's skill authoring best practices. No change to the tools or the ABAP sources.
