@@ -21,6 +21,8 @@ CLASS ltc_adobe_form DEFINITION FINAL
     METHODS write_invalid_layout   FOR TESTING.
     METHODS write_invalid_xml      FOR TESTING.
     METHODS ads_available          FOR TESTING.
+    METHODS renew_timestamp        FOR TESTING.
+    METHODS renew_timestamp_added  FOR TESTING.
 
     "! The test form, or a tolerable failure if this system does not have it
     METHODS standard_form
@@ -160,5 +162,25 @@ CLASS ltc_adobe_form IMPLEMENTATION.
         cl_abap_unit_assert=>fail( msg   = |ADS not available in this system: { lx_error->get_text( ) }|
                                    level = if_aunit_constants=>tolerable ).
     ENDTRY.
+  ENDMETHOD.
+
+  METHOD renew_timestamp.
+    " Only the timeStamp of the root changes: a changed layout must not reuse the ADS cache of the old one
+    DATA(lv_xml) = cl_abap_codepage=>convert_from( mo_cut->renew_timestamp( cl_abap_codepage=>convert_to(
+      `<?xml version="1.0"?><?xfa a="1"?><xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/" ` &&
+      `timeStamp="2025-03-28T06:07:40Z" uuid="u1"><b timeStamp="keep"/></xdp:xdp>` ) ) ).
+    cl_abap_unit_assert=>assert_char_cp(
+      act = lv_xml
+      exp = `<?xml version="1.0"?><?xfa a="1"?><xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/" ` &&
+            `timeStamp="2*Z" uuid="u1"><b timeStamp="keep"/></xdp:xdp>` ).
+    cl_abap_unit_assert=>assert_char_np( act = lv_xml
+                                         exp = '*2025-03-28T06:07:40Z*' ).
+  ENDMETHOD.
+
+  METHOD renew_timestamp_added.
+    DATA(lv_xml) = cl_abap_codepage=>convert_from( mo_cut->renew_timestamp( cl_abap_codepage=>convert_to(
+      `<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"/>` ) ) ).
+    cl_abap_unit_assert=>assert_char_cp( act = lv_xml
+                                         exp = `<xdp:xdp timeStamp="2*Z" xmlns:xdp="http://ns.adobe.com/xdp/"/>` ).
   ENDMETHOD.
 ENDCLASS.

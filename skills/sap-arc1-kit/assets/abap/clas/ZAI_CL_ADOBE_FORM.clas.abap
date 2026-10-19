@@ -1,6 +1,7 @@
 "! Reads and writes Adobe forms (transaction SFP) with the SAP APIs used by abapGit: the form as XML
 "! without its layout, the layout as XDP and the form interface as XML. Writing is limited to local
-"! ZAI_* forms ($TMP) of the current user. SAP has no API to update a form, so an existing ZAI_* copy
+"! ZAI_* forms ($TMP) of the current user. The SAP API updates the layout of a loaded form in place
+"! (LOAD in WRITE mode, SET_LAYOUT_DATA, SAVE) but cannot replace its context, so an existing ZAI_* copy
 "! is deleted and created again; customer and standard forms are never written or deleted.
 CLASS zai_cl_adobe_form DEFINITION
   PUBLIC
@@ -111,6 +112,10 @@ CLASS zai_cl_adobe_form DEFINITION
       IMPORTING iv_name           TYPE fpname
       RETURNING VALUE(rv_fm_name) TYPE rs38l_fnam
       RAISING   zai_cx_adobe_form.
+    "! New timeStamp on the xdp element, as LiveCycle Designer does when saving
+    METHODS renew_timestamp
+      IMPORTING iv_layout        TYPE xstring
+      RETURNING VALUE(rv_layout) TYPE xstring.
 ENDCLASS.
 
 
@@ -158,7 +163,11 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
             iv_text  = |Adobe form { iv_name }: layout not separated from the form: { lx_layout->get_text( ) }|
             previous = lx_layout.
     ENDTRY.
-    li_wb_form->free( ).
+    TRY.
+        li_wb_form->free( ).
+      CATCH cx_fp_api ##NO_HANDLER.
+        " Only releases the object loaded for display: the form is already read
+    ENDTRY.
 
     IF lx_convert IS BOUND.
       RAISE EXCEPTION TYPE zai_cx_adobe_form
@@ -205,11 +214,11 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     check_layout( iv_layout ).
     DATA(li_form) = to_form( iv_form   = render( ii_document = parse( iv_form )
                                                  iv_pretty   = abap_false )
-                             iv_layout = iv_layout ).
+                             iv_layout = renew_timestamp( iv_layout ) ).
     " As in abapGit: without ADS a form is not saved
     rs_result-ads_version = ads_version( ).
 
-    " No API updates a form: the own copy is deleted and created again (the tool saves a backup first)
+    " The context cannot be replaced in place: the own copy is deleted and created again (the tool saves a backup first)
     IF ls_target-form_exists = abap_true.
       delete_copy( iv_name ).
     ENDIF.
@@ -523,5 +532,27 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
             iv_text  = |Adobe form { iv_name } active but function module not available: { lx_error->get_text( ) }|
             previous = lx_error.
     ENDTRY.
+  ENDMETHOD.
+
+  METHOD renew_timestamp.
+    " ADS caches the template under timeStamp and uuid of the xdp element (form CACHE_INFO): a changed
+    " layout with the old timeStamp is printed as before. Only the root start tag changes, the rest
+    " stays byte for byte (the root was checked by check_layout)
+    DATA lv_now TYPE timestamp.
+    DATA(lv_xml) = cl_abap_codepage=>convert_from( iv_layout ).
+    FIND FIRST OCCURRENCE OF REGEX `<[^?!][^>]*>` IN lv_xml MATCH OFFSET DATA(lv_offset) MATCH LENGTH DATA(lv_length).
+    IF sy-subrc <> 0.
+      rv_layout = iv_layout.
+      RETURN.
+    ENDIF.
+    GET TIME STAMP FIELD lv_now.
+    DATA(lv_stamp) = |timeStamp="{ lv_now TIMESTAMP = ISO }Z"|.
+    DATA(lv_tag)   = substring( val = lv_xml off = lv_offset len = lv_length ).
+    REPLACE FIRST OCCURRENCE OF REGEX `timeStamp="[^"]*"` IN lv_tag WITH lv_stamp.
+    IF sy-subrc <> 0.
+      REPLACE FIRST OCCURRENCE OF REGEX `^(<[^[:space:]/>]+)` IN lv_tag WITH `$1 ` && lv_stamp.
+    ENDIF.
+    rv_layout = cl_abap_codepage=>convert_to( substring( val = lv_xml len = lv_offset ) && lv_tag &&
+                                              substring( val = lv_xml off = lv_offset + lv_length ) ).
   ENDMETHOD.
 ENDCLASS.

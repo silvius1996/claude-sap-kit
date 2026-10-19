@@ -19,9 +19,10 @@ They are ARC-1 tools, named here by their short name: in Claude Code they are
 `.mcp.json` (e.g. `mcp__arc1__Custom_AdobeFormRead`; the same for `SAPQuery`).
 
 Intended constraints of the kit: changes are made only on copies with the kit prefix, in `$TMP`,
-created by the current user; customer and standard forms are never written. SAP has no API to
-update an Adobe form, so `Custom_AdobeFormWrite` **deletes and creates again** an existing copy,
-after saving its backup. Replacing the customer form with the copy is not part of the kit yet.
+created by the current user; customer and standard forms are never written. The SAP API cannot
+replace the context of an Adobe form, so `Custom_AdobeFormWrite` **deletes and creates again** an
+existing copy, after saving its backup (the generated function module gets a new name each time).
+Replacing the customer form with the copy is not part of the kit yet.
 
 **Adobe Document Services (ADS)** must work on the system: without ADS a form is not saved and
 nothing is printed. `Custom_AdobeFormWrite` checks it and says so; the standard report
@@ -48,8 +49,9 @@ Adobe form change:
 2. **Reference preview** of the current form: `Custom_PrintPreview` on the document. Show the PDF
    to the user and use it to understand what to change.
 3. **Copy**: `Custom_AdobeFormRead` of the source form, then `Custom_AdobeFormWrite` with a
-   `<PREFIX>_...` name and the two files `.form.xml` and `.xdp`. Read the copy back: apart from
-   name and administrative data, form XML and XDP must be the same.
+   `<PREFIX>_...` name and the two files `.form.xml` and `.xdp`. Read the copy back: the form XML
+   must be the same apart from the object ids (`id="o42"` / `href="#o42"` are renumbered), the XDP
+   apart from the XML declaration and the `timeStamp` of the `xdp` element, renewed at every write.
 4. **Check the copy**: `Custom_PrintPreview` with `form=<copy>`, `program`, `routine`. The PDF
    must be identical to the one from step 2. Compare the text with the script of the skill
    `sap-smartform-xml` (needs `pip install pypdf`):
@@ -102,8 +104,12 @@ Useful searches: `grep -n "<printed text>" <NAME>.xdp` to find a static text,
   XDP must follow.
 - **Interface** (`.interface.xml`): parameters, global data and initialization code. Read only:
   changes to the interface are made by the user in `SFP`.
-- Static texts of the layout are translated with XLIFF (`SE63`): after changing a text, tell the
-  user that the other languages may need a new translation.
+- **Languages.** The `.xdp` file is the layout of the original language of the form. The layouts of
+  the translations are in the form XML (`<LAYOUTT>`, one `<FPLAYOUTT>` per `<LANGUAGE>`, XDP in base64)
+  and do not change when the `.xdp` changes: a document printed in another language keeps the old
+  text. Test with a document in the original language, and tell the user that the translations
+  (`SE63`) must follow. The `<tags>` element at the top of the XDP holds the source texts for the
+  translation (`<value id="...">`, the `xliff:rid` of the text); keep it in line with the changed text.
 
 ## What to expect and how to read errors
 
@@ -120,6 +126,7 @@ Useful searches: `grep -n "<printed text>" <NAME>.xdp` to find a static text,
 | "saved but not activated" | The form has errors (for example a context that does not match the interface): open it in `SFP` in display mode, fix the files and write again |
 | "active but function module not available" | Generation failed: open the form in `SFP` and activate it there |
 | Preview: "neither SmartForms nor Adobe form" / "has no function module" | Wrong name or form not active |
+| Preview of a changed copy prints the old text | The document is printed in a translation, not in the original language (see "Languages"). ADS caches layouts under `timeStamp` and `uuid` of the XDP: the tool renews the `timeStamp`, so a layout changed outside the kit with the old one can also print as before |
 | Preview: HTTP 500 | The print program issued a `MESSAGE` E/A (e.g. nothing to print for that document) |
 
 The preview does not change the NAST message, but the print program really runs: if the program

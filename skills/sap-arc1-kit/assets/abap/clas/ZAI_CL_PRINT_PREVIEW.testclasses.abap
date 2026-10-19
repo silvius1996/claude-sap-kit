@@ -184,5 +184,7 @@ CLASS ltc_print_preview IMPLEMENTATION.
                                               iv_routine = 'ENTRY' ).
     cl_abap_unit_assert=>assert_equals( act = ls_tnapr-sform
                                         exp = 'FP_TEST_00' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_tnapr-formtype
+                                        exp = zai_cl_print_preview=>gc_formtype_pdf ).
   ENDMETHOD.
 ENDCLASS.

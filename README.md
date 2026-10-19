@@ -100,8 +100,8 @@ The kit is designed to be safe even when an AI is driving it:
 - replacing a customer form needs a transport request given by the user, a `prepare` step with a summary
   and a one-time token, and is refused if the original or the copy changed in the meantime;
 - allowed packages, allowed requests and the author check are configured in the project `.mcp.json`;
-- nothing is ever deleted, with one exception: SAP has no API to update an Adobe form, so an existing
-  `ZAI_*` copy (own, in `$TMP`) is deleted and created again after its backup;
+- nothing is ever deleted, with one exception: the SAP API cannot replace the context of an Adobe form,
+  so an existing `ZAI_*` copy (own, in `$TMP`) is deleted and created again after its backup;
 - the skills ask for confirmation before running reports or print programs that change data.
 
 ## Business data and the model

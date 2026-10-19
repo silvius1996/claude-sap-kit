@@ -96,7 +96,7 @@ pass its content unchanged.
 - `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 7 entry
   FMs with `FMODE = 'R'`, `<PREFIX>_PRINT_CALL_ROUTINE` empty.
 - `SAPDiagnose unittest` on the 4 classes: 8 (report launcher) + 10 (print preview) + 14 (SmartForms)
-  + 9 (Adobe forms) tests, no errors. Tests that find no
+  + 11 (Adobe forms) tests, no errors. Tests that find no
   suitable data on the system end with a **tolerable** assertion (`CL_ABAP_UNIT_ASSERT=>SKIP`
   does not exist on 7.50): ARC-1 then reports the class as `failed` with `severity: tolerable`.
   This is expected, not a problem, when the message says what is missing:

@@ -8,7 +8,8 @@ import { buildEnvelope, readElement, readFault } from '../soap-rfc.js';
 import { callAdobeRead, DEFAULT_ADOBE_DIR } from './Custom_AdobeFormRead.js';
 
 // Uploads form XML + layout XDP as a ZAI_* Adobe form in $TMP: save, activation, function module.
-// SAP has no API to update a form: an existing ZAI_* copy is deleted and created again, after a local backup.
+// The SAP API cannot replace the context of a form: an existing ZAI_* copy is deleted and created again,
+// after a local backup. The ABAP side renews the timeStamp of the XDP, so ADS does not print a cached layout.
 const SOAP_RFC_PATH = '/sap/bc/soap/rfc';
 const HEADERS = { SOAPAction: 'urn:sap-com:document:sap:rfc:functions', Accept: 'text/xml' };
 
@@ -34,8 +35,9 @@ export default defineTool({
   description:
     'Uploads a form XML and its layout XDP as a ZAI_* Adobe form in $TMP: saves it, activates it and generates the ' +
     'function module. Needs Adobe Document Services (ADS). Refuses non-ZAI_* names and forms of other authors or ' +
-    'outside $TMP. An existing ZAI_* copy is deleted and created again (SAP has no API to update a form), after an ' +
-    'XML/XDP backup in output/adobe-forms/backup. Never writes customer or standard forms, never uses transport requests.',
+    'outside $TMP. An existing ZAI_* copy is deleted and created again (the SAP API cannot replace the context of a ' +
+    'form), after an XML/XDP backup in output/adobe-forms/backup. The timeStamp of the XDP is renewed, as Designer ' +
+    'does, so that ADS does not print a cached layout. Never writes customer or standard forms, never uses transport requests.',
   schema,
   policy: { scope: 'write', opType: OperationType.Workflow },
   availableOn: 'onprem',

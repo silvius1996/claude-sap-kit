@@ -17,6 +17,8 @@ CLASS zai_cl_print_preview DEFINITION
     CONSTANTS gc_title_prefix TYPE string VALUE `Claude preview`.
     CONSTANTS gc_kind_smartform TYPE char1 VALUE 'S'.
     CONSTANTS gc_kind_adobe     TYPE char1 VALUE 'A'.
+    "! TNAPR-FORMTYPE of an Adobe form
+    CONSTANTS gc_formtype_pdf   TYPE tnapr-formtype VALUE '2'.
 
     METHODS run
       IMPORTING iv_document      TYPE nast-objky
@@ -241,21 +243,26 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
             iv_text = |Form { iv_form } does not exist or is not active (neither SmartForms nor Adobe form)|.
     ENDCASE.
 
-    " Configuration in memory only: TNAPR is not written. The form type comes from the configured
-    " entry when that one has a form of the same kind (SmartForms or Adobe)
+    " Configuration in memory only: TNAPR is not written. Form type (domain NA_FORMTYPE): always
+    " 2 = PDF for an Adobe form; for SmartForms the configured one (empty or 1) when that is a SmartForms too
     rs_tnapr = VALUE #( kappl = is_nast-kappl
                         kschl = is_nast-kschl
                         nacha = '1'
                         pgnam = lv_program
                         ronam = iv_routine
                         sform = iv_form ).
-    SELECT SINGLE sform, formtype FROM tnapr
-      WHERE kappl = @is_nast-kappl
-        AND kschl = @is_nast-kschl
-        AND nacha = '1'
-      INTO @DATA(ls_configured).
-    IF sy-subrc = 0 AND ls_configured-sform IS NOT INITIAL AND form_kind( CONV #( ls_configured-sform ) ) = lv_kind.
-      rs_tnapr-formtype = ls_configured-formtype.
+    IF lv_kind = gc_kind_adobe.
+      rs_tnapr-formtype = gc_formtype_pdf.
+    ELSE.
+      SELECT SINGLE sform, formtype FROM tnapr
+        WHERE kappl = @is_nast-kappl
+          AND kschl = @is_nast-kschl
+          AND nacha = '1'
+        INTO @DATA(ls_configured).
+      IF sy-subrc = 0 AND ls_configured-sform IS NOT INITIAL
+         AND form_kind( CONV #( ls_configured-sform ) ) = gc_kind_smartform.
+        rs_tnapr-formtype = ls_configured-formtype.
+      ENDIF.
     ENDIF.
   ENDMETHOD.
 
