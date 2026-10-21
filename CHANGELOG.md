@@ -1,12 +1,13 @@
 # Changelog
 
-## 0.6.0 (not released yet)
+## 0.6.0
 
 Adobe forms (Interactive Forms by Adobe, transaction SFP). Tested live on S/4HANA (SAP_BASIS 816) with ADS:
 read of `FP_TEST_00` and of the sales document form `SD_SDOC_FORM01`, copy, preview of an order with the copy
 (same text as the original), text change in the XDP, preview and rollback; a new printed field read from a `Z`
 form interface; update in place of that interface (initialization code), preview, creation of a second interface,
-refusals and rollback from the backup.
+refusals and rollback from the backup. Not tested live on SAP_BASIS 7.50 (ECC) yet: the ABAP sources pass
+abaplint with the v750 syntax only.
 
 - `Custom_AdobeFormRead`: downloads any Adobe form as three files, as abapGit does: the form XML without layout
   (`<NAME>.form.xml`, one element per line), the layout as XDP (`<NAME>.xdp`) and the form interface
