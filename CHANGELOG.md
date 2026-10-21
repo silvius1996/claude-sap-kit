@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 (not released yet: to be tested live)
+
+Replacement of a customer Adobe form with the approved copy, for layout changes.
+
+- `Custom_AdobeFormReplace`: gives a customer Adobe form (`Z*`/`Y*`, in a transportable package) the layout of the
+  approved `ZAI_*` copy, recording it in the given transport request. Two steps as for SmartForms: `prepare`
+  (checks, XML/XDP backup of the original, summary with the owner of the request, one-time token; no writes) and
+  `execute` (with the token, refused if the original or the copy changed). The layout is written in place
+  (`CL_FP_WB_FORM=>LOAD` in write mode, `SET_LAYOUT_DATA`, `SAVE`, activation): the SAP API cannot replace the
+  context of a form, so the copy is refused if its form XML differs from the original outside the layout
+  (context, interface, properties), with the differing lines. Also refused: a task instead of its request (the
+  message names the request), an original with an inactive version, project rules of `.mcp.json`.
+- `Custom_AdobeFormRead`: object ids renumbered in document order and `CACHE_INFO` emptied, as abapGit does, so the
+  same form always gives the same XML and copy and original can be compared line by line.
+- Fix: with `ZAI_CHECK_AUTHOR=false` the author check of `Custom_SmartFormReplace` stayed on, because SOAP-RFC drops
+  the empty parameter and the function module default `'X'` applied. A check switched off is now sent as `'-'`.
+- Fix: the object prefix may have at most 8 characters, not 10: with 9 or 10 the function module
+  `<PREFIX>_ADOBE_INTERFACE_WRITE` (since 0.6.0) exceeded the 30 characters allowed by SAP. `set_prefix.py` refuses
+  longer prefixes.
+- README: Adobe form interfaces are no longer read only (`Custom_AdobeInterfaceWrite`, since 0.6.0).
+- New remote-enabled FM `ZAI_ADOBE_FORM_REPLACE`; 8 more ABAP Unit tests (harmless) in `ZAI_CL_ADOBE_FORM`;
+  35 Node tests.
+
 ## 0.6.0
 
 Adobe forms (Interactive Forms by Adobe, transaction SFP). Tested live on S/4HANA (SAP_BASIS 816) with ADS:

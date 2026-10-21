@@ -27,6 +27,14 @@ CLASS ltc_adobe_form DEFINITION FINAL
     METHODS interface_standard_refused FOR TESTING.
     METHODS interface_invalid_xml      FOR TESTING.
     METHODS interface_form_xml_refused FOR TESTING.
+    METHODS normalize_ids              FOR TESTING RAISING cx_static_check.
+    METHODS clear_cache_info           FOR TESTING RAISING cx_static_check.
+    METHODS replace_standard_refused   FOR TESTING.
+    METHODS replace_copy_as_original   FOR TESTING.
+    METHODS replace_copy_not_zai       FOR TESTING.
+    METHODS replace_transport_missing  FOR TESTING.
+    METHODS replace_task_refused       FOR TESTING.
+    METHODS replace_other_author       FOR TESTING.
 
     "! The test form, or a tolerable failure if this system does not have it
     METHODS standard_form
@@ -35,6 +43,14 @@ CLASS ltc_adobe_form DEFINITION FINAL
     METHODS assert_no_tadir
       IMPORTING iv_object TYPE trobjtype DEFAULT 'SFPF'
                 iv_name   TYPE fpname    DEFAULT gc_copy.
+
+    "! Refusal expected from prepare_replace, with a message matching the pattern
+    METHODS assert_replace_refused
+      IMPORTING iv_original     TYPE fpname
+                iv_copy         TYPE fpname    DEFAULT gc_copy
+                iv_transport    TYPE trkorr    DEFAULT 'DEVK999999'
+                iv_check_author TYPE abap_bool DEFAULT abap_true
+                iv_pattern      TYPE string.
 ENDCLASS.
 
 
@@ -225,5 +241,127 @@ CLASS ltc_adobe_form IMPLEMENTATION.
                                              exp = 'Invalid interface XML*' ).
     ENDTRY.
     assert_no_tadir( iv_object = 'SFPI' iv_name = gc_copy_if ).
+  ENDMETHOD.
+
+  METHOD normalize_ids.
+    " Ids renumbered in document order, references following them: the same form gives the same XML
+    DATA(li_document) = mo_cut->parse( cl_abap_codepage=>convert_to(
+      `<a><b id="o17"/><c href="#o17"/><d id="o3"><e href="#o3"/><f href="#o17"/></d></a>` ) ).
+    mo_cut->normalize_ids( li_document ).
+    cl_abap_unit_assert=>assert_char_cp(
+      act = cl_abap_codepage=>convert_from( mo_cut->render( ii_document = li_document
+                                                            iv_pretty   = abap_false ) )
+      exp = `*<a><b id="o1"/><c href="#o1"/><d id="o2"><e href="#o2"/><f href="#o1"/></d></a>*` ).
+  ENDMETHOD.
+
+  METHOD clear_cache_info.
+    DATA(li_document) = mo_cut->parse( cl_abap_codepage=>convert_to(
+      `<a><CACHE_INFO>2026-10-19T16:52:37Z$x$0$en_US$v1.0$?</CACHE_INFO><b>1</b></a>` ) ).
+    mo_cut->clear_cache_info( li_document ).
+    cl_abap_unit_assert=>assert_char_cp(
+      act = cl_abap_codepage=>convert_from( mo_cut->render( ii_document = li_document
+                                                            iv_pretty   = abap_false ) )
+      exp = `*<a><CACHE_INFO/><b>1</b></a>*` ).
+  ENDMETHOD.
+
+  METHOD assert_replace_refused.
+    TRY.
+        mo_cut->prepare_replace( iv_original     = iv_original
+                                 iv_copy         = iv_copy
+                                 iv_transport    = iv_transport
+                                 iv_check_author = iv_check_author ).
+        cl_abap_unit_assert=>fail( |Replacement of { iv_original } with { iv_copy } in { iv_transport } not refused| ).
+      CATCH zai_cx_adobe_form INTO DATA(lx_error).
+        cl_abap_unit_assert=>assert_char_cp( act = lx_error->get_text( )
+                                             exp = iv_pattern ).
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD replace_standard_refused.
+    assert_replace_refused( iv_original = gc_standard
+                            iv_pattern  = 'Replacement allowed only*' ).
+  ENDMETHOD.
+
+  METHOD replace_copy_as_original.
+    assert_replace_refused( iv_original = gc_copy
+                            iv_copy     = 'ZAI_AF_UNITTEST2'
+                            iv_pattern  = '*is a ZAI_* copy*' ).
+  ENDMETHOD.
+
+  METHOD replace_copy_not_zai.
+    assert_replace_refused( iv_original = 'ZAF_UNITTEST'
+                            iv_copy     = gc_standard
+                            iv_pattern  = 'The copy must*' ).
+  ENDMETHOD.
+
+  METHOD replace_transport_missing.
+    assert_replace_refused( iv_original  = 'ZAF_UNITTEST'
+                            iv_transport = 'XXXK999999'
+                            iv_pattern   = 'Transport request XXXK999999 does not exist' ).
+  ENDMETHOD.
+
+  METHOD replace_task_refused.
+    " A task instead of its request: the message names the request
+    SELECT trkorr, strkorr FROM e070
+      WHERE strkorr <> ' '
+        AND trstatus IN ('D','L')
+      ORDER BY trkorr
+      INTO @DATA(ls_task)
+      UP TO 1 ROWS.
+    ENDSELECT.
+    IF sy-subrc <> 0.
+      cl_abap_unit_assert=>fail( msg   = 'No open task in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
+    ENDIF.
+    assert_replace_refused( iv_original  = 'ZAF_UNITTEST'
+                            iv_transport = ls_task-trkorr
+                            iv_pattern   = |*task of request { ls_task-strkorr }*| ).
+  ENDMETHOD.
+
+  METHOD replace_other_author.
+    " Transportable Z*/Y* Adobe form of another user and an open workbench request
+    SELECT obj_name FROM tadir
+      WHERE pgmid    = 'R3TR'
+        AND object   = 'SFPF'
+        AND ( obj_name LIKE 'Z%' OR obj_name LIKE 'Y%' )
+        AND obj_name NOT LIKE 'ZAI\_%' ESCAPE '\'
+        AND devclass <> '$TMP'
+        AND devclass <> ' '
+        AND author   <> @sy-uname
+      ORDER BY obj_name
+      INTO @DATA(lv_form)
+      UP TO 1 ROWS
+      BYPASSING BUFFER.
+    ENDSELECT.
+    SELECT trkorr FROM e070
+      WHERE trfunction = 'K'
+        AND trstatus   IN ('D','L')
+        AND strkorr    = ' '
+      ORDER BY trkorr
+      INTO @DATA(lv_transport)
+      UP TO 1 ROWS.
+    ENDSELECT.
+    IF lv_form IS INITIAL OR lv_transport IS INITIAL.
+      cl_abap_unit_assert=>fail( msg   = 'No transportable Z*/Y* Adobe forms of other users or no open request'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
+    ENDIF.
+
+    assert_replace_refused( iv_original  = CONV #( lv_form )
+                            iv_transport = lv_transport
+                            iv_pattern   = |*another user*{ sy-uname }*| ).
+
+    " Check disabled (shared user): a later check refuses it, not the author one
+    TRY.
+        mo_cut->prepare_replace( iv_original     = CONV #( lv_form )
+                                 iv_copy         = gc_copy
+                                 iv_transport    = lv_transport
+                                 iv_check_author = abap_false ).
+        cl_abap_unit_assert=>fail( 'Missing copy accepted' ).
+      CATCH zai_cx_adobe_form INTO DATA(lx_error).
+        cl_abap_unit_assert=>assert_char_np( act = lx_error->get_text( )
+                                             exp = '*another user*' ).
+    ENDTRY.
   ENDMETHOD.
 ENDCLASS.

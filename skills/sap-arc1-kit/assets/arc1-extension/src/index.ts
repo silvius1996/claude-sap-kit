@@ -7,12 +7,13 @@ import smartFormReplace from './tools/Custom_SmartFormReplace.js';
 import adobeFormRead from './tools/Custom_AdobeFormRead.js';
 import adobeFormWrite from './tools/Custom_AdobeFormWrite.js';
 import adobeInterfaceWrite from './tools/Custom_AdobeInterfaceWrite.js';
+import adobeFormReplace from './tools/Custom_AdobeFormReplace.js';
 
 // Loaded by ARC-1 with:
 //   ARC1_PLUGINS=<absolute path>/arc1-extension/dist/index.js
 const plugin: Plugin = {
   name: 'arc1-sap-tools',
-  version: '0.6.0',
+  version: '0.7.0',
   apiVersion: 1,
   tools: [
     launchReport,
@@ -23,6 +24,7 @@ const plugin: Plugin = {
     adobeFormRead,
     adobeFormWrite,
     adobeInterfaceWrite,
+    adobeFormReplace,
   ],
 };
 
