@@ -149,7 +149,7 @@ CLASS zai_cl_adobe_form DEFINITION
       IMPORTING iv_xml        TYPE xstring
       RETURNING VALUE(rv_xml) TYPE xstring.
 
-    "! As abapGit (fix_oref): object ids o<n> renumbered in document order, with their references #o<n>
+    "! As abapGit (fix_oref): object ids o1, o2... renumbered in document order, with their references #o1, #o2...
     METHODS normalize_ids
       IMPORTING ii_document TYPE REF TO if_ixml_document.
 
@@ -186,8 +186,10 @@ CLASS zai_cl_adobe_form DEFINITION
 
     "! Layout written in place into the loaded form (WRITE mode): context and interface stay as they are
     METHODS replace_layout
-      IMPORTING iv_name   TYPE fpname
-                iv_layout TYPE xstring
+      IMPORTING iv_name      TYPE fpname
+                iv_layout    TYPE xstring
+                iv_language  TYPE sylangu
+                iv_transport TYPE trkorr
       RAISING   zai_cx_adobe_form.
 
     METHODS check_layout
@@ -710,8 +712,10 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
                  iv_language  = ls_info-language
                  iv_transport = iv_transport ).
     TRY.
-        replace_layout( iv_name   = iv_original
-                        iv_layout = renew_timestamp( ls_info-copy_layout ) ).
+        replace_layout( iv_name      = iv_original
+                        iv_layout    = renew_timestamp( ls_info-copy_layout )
+                        iv_language  = ls_info-language
+                        iv_transport = iv_transport ).
         activate( iv_original ).
         rv_fm_name = function_module( iv_original ).
       CATCH zai_cx_adobe_form INTO DATA(lx_error).
@@ -874,9 +878,28 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
   METHOD replace_layout.
     DATA li_wb_form TYPE REF TO if_fp_wb_form.
     DATA li_form    TYPE REF TO if_fp_form.
+    " In the original language, without language check: in a form of another language the lock asks in a
+    " popup whether to change the original language, and via RFC that is a dump (DYNPRO_SEND_IN_BACKGROUND).
+    " The form is already in the request (corr_insert): I_DARK also skips the correction dialog
     TRY.
-        li_wb_form = cl_fp_wb_form=>load( i_name = iv_name
-                                          i_mode = if_fp_wb_object=>c_mode_write ).
+        TRY.
+            CALL METHOD cl_fp_wb_form=>('LOAD')
+              EXPORTING
+                i_name                    = iv_name
+                i_mode                    = if_fp_wb_object=>c_mode_write
+                i_language                = iv_language
+                i_ordernum                = iv_transport
+                i_suppress_language_check = abap_true
+                i_dark                    = abap_true
+              RECEIVING
+                r_wb_form                 = li_wb_form.
+          CATCH cx_sy_dyn_call_error.
+            li_wb_form = cl_fp_wb_form=>load( i_name                    = iv_name
+                                              i_mode                    = if_fp_wb_object=>c_mode_write
+                                              i_language                = iv_language
+                                              i_ordernum                = iv_transport
+                                              i_suppress_language_check = abap_true ).
+        ENDTRY.
         li_form ?= li_wb_form->get_object( ).
         li_form->get_layout( )->set_layout_data( iv_layout ).
         li_wb_form->save( ).

@@ -31,6 +31,10 @@ export function readAdobePrepareResponse(body: string): AdobePrepareResult {
 // Administrative data: they differ between a copy and its original even when nothing else does
 export const IGNORED_ELEMENTS = ['FIRSTUSER', 'FIRSTDATE', 'FIRSTTIME', 'LASTUSER', 'LASTDATE', 'LASTTIME', 'CACHE_INFO'];
 
+// Layouts per language (base64 XDP): SAP generates them again from the layout when the form is saved, so they
+// belong to the layout and differ as soon as the copy has a changed layout
+export const IGNORED_BLOCKS = ['LAYOUTT'];
+
 const MAX_SHOWN = 5;
 
 function escapeRegExp(value: string): string {
@@ -52,10 +56,22 @@ function comparableLines(xml: Buffer, rename?: { from: string; to: string }): Li
   const ignored = new RegExp(
     `^\\s*<(?:[\\w-]+:)?(${IGNORED_ELEMENTS.join('|')})(?:\\s[^>]*)?(?:/>|>[^<]*</(?:[\\w-]+:)?\\1>)\\s*$`,
   );
-  return text
-    .split(/\r?\n/)
-    .map((line, i) => ({ number: i + 1, text: line.trim() }))
-    .filter((line) => line.text !== '' && !ignored.test(line.text));
+  const blockStart = new RegExp(`^<(?:[\\w-]+:)?(${IGNORED_BLOCKS.join('|')})>$`);
+  let blockEnd: string | undefined;
+  const lines: Line[] = [];
+  text.split(/\r?\n/).forEach((raw, i) => {
+    const line = { number: i + 1, text: raw.trim() };
+    if (blockEnd) {
+      if (line.text === blockEnd) blockEnd = undefined;
+      return;
+    }
+    if (blockStart.test(line.text)) {
+      blockEnd = line.text.replace('<', '</');
+      return;
+    }
+    if (line.text !== '' && !ignored.test(line.text)) lines.push(line);
+  });
+  return lines;
 }
 
 // The replacement writes only the layout: context, interface and properties of the copy must be those of the
@@ -100,7 +116,8 @@ export function formatAdobePrepareSummary(p: {
     `Transport request: ${p.transport} (owner ${r.trOwner || '-'})`,
     `Backup of the original: ${p.backup.join(', ')}`,
     'Checked: outside the layout the copy is the same as the original (context, interface, properties)',
-    'Only the layout of the original language changes: translated layouts (SE63) stay as they are',
+    'The layout is written in the original language; SAP generates the layouts of the other languages again ' +
+      'from it, as when the form is saved in SFP: check the translations in preview',
     `Token: ${r.token}`,
     'Nothing changed in SAP. To proceed: action=execute with the same token, after explicit confirmation by the user.',
   ].join('\n');

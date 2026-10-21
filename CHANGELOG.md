@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.7.0 (not released yet: to be tested live)
+## 0.7.0
 
-Replacement of a customer Adobe form with the approved copy, for layout changes.
+Replacement of a customer Adobe form with the approved copy, for layout changes. Tested live on S/4HANA
+(SAP_BASIS 816) with ADS on a `Z` copy of `FP_TEST_00` in a transportable package; on 7.50 checked with
+abaplint only (the `LOAD` parameters used for the replacement are not verified there yet).
 
 - `Custom_AdobeFormReplace`: gives a customer Adobe form (`Z*`/`Y*`, in a transportable package) the layout of the
   approved `ZAI_*` copy, recording it in the given transport request. Two steps as for SmartForms: `prepare`
@@ -12,6 +14,18 @@ Replacement of a customer Adobe form with the approved copy, for layout changes.
   context of a form, so the copy is refused if its form XML differs from the original outside the layout
   (context, interface, properties), with the differing lines. Also refused: a task instead of its request (the
   message names the request), an original with an inactive version, project rules of `.mcp.json`.
+- Fixes from the live test of `Custom_AdobeFormReplace`:
+  - `execute` ended in a short dump (`DYNPRO_SEND_IN_BACKGROUND`) when the original language of the form was not
+    the logon language of the SOAP call: locking the form asked in a popup whether to change the original
+    language. The form is now opened in its original language without language check and without dialogs
+    (`LOAD` with `I_LANGUAGE`, `I_SUPPRESS_LANGUAGE_CHECK`, `I_ORDERNUM`, `I_DARK`); this also writes the layout
+    of the original language, not a new translation in the logon language.
+  - `prepare` refused a copy with a changed layout because it compared the layouts per language (`<LAYOUTT>` in
+    the form XML), which SAP generates from the layout. They are no longer compared.
+  - The summary no longer says that translated layouts stay as they are: after `execute` SAP generates the
+    layouts of the other languages again from the new one, as when the form is saved in SFP.
+- Skill `sap-adobe-form`: SAP writes the `<tags>` of the XDP (texts for the translation) again from the texts of
+  the template at every write, so a text is changed in the template, not in `<tags>`.
 - `Custom_AdobeFormRead`: object ids renumbered in document order and `CACHE_INFO` emptied, as abapGit does, so the
   same form always gives the same XML and copy and original can be compared line by line.
 - Fix: with `ZAI_CHECK_AUTHOR=false` the author check of `Custom_SmartFormReplace` stayed on, because SOAP-RFC drops
@@ -20,8 +34,8 @@ Replacement of a customer Adobe form with the approved copy, for layout changes.
   `<PREFIX>_ADOBE_INTERFACE_WRITE` (since 0.6.0) exceeded the 30 characters allowed by SAP. `set_prefix.py` refuses
   longer prefixes.
 - README: Adobe form interfaces are no longer read only (`Custom_AdobeInterfaceWrite`, since 0.6.0).
-- New remote-enabled FM `ZAI_ADOBE_FORM_REPLACE`; 8 more ABAP Unit tests (harmless) in `ZAI_CL_ADOBE_FORM`;
-  35 Node tests.
+- New remote-enabled FM `ZAI_ADOBE_FORM_REPLACE`; 8 more ABAP Unit tests (harmless) in `ZAI_CL_ADOBE_FORM`
+  (22 in all); 36 Node tests.
 
 ## 0.6.0
 

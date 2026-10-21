@@ -54,6 +54,17 @@ test('compareFormXml: the copy name is replaced only as a whole name', () => {
   assert.deepEqual(compareFormXml(original, copy, 'ZSD_ORDER', 'ZAI_SD_ORDER'), []);
 });
 
+test('compareFormXml: the layouts per language (LAYOUTT) belong to the layout and are not compared', () => {
+  const layoutt = (text) =>
+    ['  <LAYOUTT>', '   <FPLAYOUTT>', '    <LANGUAGE>D</LANGUAGE>', `    <LAYOUT>${text}</LAYOUT>`, '   </FPLAYOUTT>', '  </LAYOUTT>'].join('\n');
+  const original = Buffer.from(FORM('ZSD_ORDER').toString('utf8').replace(' <CACHE_INFO/>', layoutt('UGluaw==') + '\n <CACHE_INFO/>'));
+  const copy = Buffer.from(FORM('ZAI_SD_ORDER').toString('utf8').replace(' <CACHE_INFO/>', layoutt('Qmx1ZQ==') + '\n <CACHE_INFO/>'));
+  assert.deepEqual(compareFormXml(original, copy, 'ZSD_ORDER', 'ZAI_SD_ORDER'), []);
+  // The lines after the block keep their numbers in the file
+  const changed = Buffer.from(copy.toString('utf8').replace('HEADER-VBELN', 'HEADER-ERDAT'));
+  assert.equal(compareFormXml(original, changed, 'ZSD_ORDER', 'ZAI_SD_ORDER')[1], 'original line 15: <FIELD>HEADER-VBELN</FIELD>');
+});
+
 test('compareFormXml: a change in the context is reported with its lines', () => {
   const differences = compareFormXml(FORM('ZSD_ORDER'), FORM('ZAI_SD_ORDER', '  <FIELD>HEADER-ERDAT</FIELD>'), 'ZSD_ORDER', 'ZAI_SD_ORDER');
   assert.equal(differences.length, 2);
@@ -79,7 +90,7 @@ test('formatAdobePrepareSummary lists everything needed to confirm', () => {
     backup: ['C:\\x\\ZSD_ORDER_20261021_100000.form.xml', 'C:\\x\\ZSD_ORDER_20261021_100000.xdp'],
     result: readAdobePrepareResponse(BODY),
   });
-  for (const part of ['layout of ZSD_ORDER ← ZAI_SD_ORDER', 'ZSD_FORMS', 'owner DEVUSER2', '.xdp', 'translated layouts', 'Token: WlNE', 'action=execute']) {
+  for (const part of ['layout of ZSD_ORDER ← ZAI_SD_ORDER', 'ZSD_FORMS', 'owner DEVUSER2', '.xdp', 'other languages', 'Token: WlNE', 'action=execute']) {
     assert.ok(text.includes(part), part);
   }
 });

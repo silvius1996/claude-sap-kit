@@ -56,7 +56,8 @@ Adobe form change:
    to the user and use it to understand what to change.
 3. **Copy**: `Custom_AdobeFormRead` of the source form, then `Custom_AdobeFormWrite` with a
    `<PREFIX>_...` name and the two files `.form.xml` and `.xdp`. Read the copy back: the form XML
-   must be the same apart from the form name and the administrative data (users, dates; the tool
+   must be the same apart from the form name, the layouts per language (`<LAYOUTT>`) and the
+   administrative data (users, dates; the tool
    renumbers the object ids `id="o42"` / `href="#o42"` and empties `CACHE_INFO`, so the same form
    always gives the same XML), the XDP apart from the XML declaration and the `timeStamp` of the
    `xdp` element, renewed at every write.
@@ -90,8 +91,10 @@ Adobe form change:
    - After `execute`: preview again with the original (without `form`) and compare it with the
      preview of the copy; check the request with `SAPTransport(action="get")`: it contains
      `R3TR SFPF <original>`. The tool never releases the request, and a token is valid once.
-   - Only the layout of the original language changes: the translated layouts stay as they are
-     (see "Languages"); tell the user.
+   - The layout is written in the original language of the form and SAP generates the layouts of the
+     other languages again from it, as when the form is saved in `SFP` (see "Languages"): preview in
+     the languages the documents use, and tell the user to check the translations (`SE63`).
+   - The layouts per language (`<LAYOUTT>` in the form XML) are not compared: they come from the layout.
    - To roll back: upload the backup of `prepare` (or of `execute`) into a copy with
      `Custom_AdobeFormWrite`, then prepare + execute again.
 
@@ -161,11 +164,14 @@ Later changes to the code or the data are made only on the interface (`Custom_Ad
 with the same name: "updated in place"); the form copy does not need to be written again. To roll
 back, upload the backup file saved by the tool.
 - **Languages.** The `.xdp` file is the layout of the original language of the form. The layouts of
-  the translations are in the form XML (`<LAYOUTT>`, one `<FPLAYOUTT>` per `<LANGUAGE>`, XDP in base64)
-  and do not change when the `.xdp` changes: a document printed in another language keeps the old
-  text. Test with a document in the original language, and tell the user that the translations
-  (`SE63`) must follow. The `<tags>` element at the top of the XDP holds the source texts for the
-  translation (`<value id="...">`, the `xliff:rid` of the text); keep it in line with the changed text.
+  the translations are in the form XML (`<LAYOUTT>`, one `<FPLAYOUTT>` per `<LANGUAGE>`, XDP in base64).
+  Whether SAP generates them again from a changed `.xdp` depends on the case (seen on S/4HANA 816: a
+  copy written once kept the old ones, another one and the original after `Custom_AdobeFormReplace`
+  got the new layout in every language): always preview in the languages the documents use, and tell
+  the user that the translations (`SE63`) must follow. The `<tags>` element at the top of the XDP holds
+  the texts for the translation (`<value id="...">`, the `xliff:id` of the text): SAP writes it again
+  from the texts of the template at every write, so a change made only in `<tags>` is lost. Change
+  the text in the template (`<draw>`, caption, `<desc>`).
 
 ## What to expect and how to read errors
 

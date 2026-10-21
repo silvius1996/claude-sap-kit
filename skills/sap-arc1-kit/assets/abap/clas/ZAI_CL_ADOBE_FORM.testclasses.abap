@@ -251,7 +251,8 @@ CLASS ltc_adobe_form IMPLEMENTATION.
     cl_abap_unit_assert=>assert_char_cp(
       act = cl_abap_codepage=>convert_from( mo_cut->render( ii_document = li_document
                                                             iv_pretty   = abap_false ) )
-      exp = `*<a><b id="o1"/><c href="#o1"/><d id="o2"><e href="#o2"/><f href="#o1"/></d></a>*` ).
+      " ## is a literal # in a CP pattern
+      exp = `*<a><b id="o1"/><c href="##o1"/><d id="o2"><e href="##o2"/><f href="##o1"/></d></a>*` ).
   ENDMETHOD.
 
   METHOD clear_cache_info.

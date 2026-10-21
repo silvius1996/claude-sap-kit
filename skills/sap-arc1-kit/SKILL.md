@@ -115,7 +115,7 @@ pass its content unchanged.
 ## Step 4 — ARC-1 extension
 
 1. Copy `sap-kit/arc1-extension` into the project folder (e.g. `<project>/arc1-extension`).
-2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 35 Node tests).
+2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 36 Node tests).
    `--ignore-scripts` skips the native build of ARC-1 dependencies, which the extension does
    not need.
 3. In `.mcp.json`, in the ARC-1 server, add to `env`:
