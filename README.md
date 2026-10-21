@@ -25,7 +25,7 @@ ADT does not cover: running reports, previewing print output and editing SmartFo
 ## How it works
 
 ```
-Claude Code ──MCP──▶ ARC-1 ──▶ extension (7 Custom_* tools) ──HTTP /sap/bc/soap/rfc──▶ remote-enabled FMs ZAI_* ──▶ ABAP classes
+Claude Code ──MCP──▶ ARC-1 ──▶ extension (8 Custom_* tools) ──HTTP /sap/bc/soap/rfc──▶ remote-enabled FMs ZAI_* ──▶ ABAP classes
 ```
 
 | Tool | What it does |
@@ -37,6 +37,7 @@ Claude Code ──MCP──▶ ARC-1 ──▶ extension (7 Custom_* tools) ─�
 | `Custom_SmartFormReplace` | Replaces a customer form with the approved copy, under a transport request, in two steps (`prepare` → `execute`) |
 | `Custom_AdobeFormRead` | Downloads any Adobe form (SFP) as three files: form XML without layout, layout XDP, interface XML |
 | `Custom_AdobeFormWrite` | Uploads form XML + XDP as a `ZAI_*` copy in `$TMP`, with activation and FM generation |
+| `Custom_AdobeInterfaceWrite` | Uploads an interface XML as a `ZAI_*` form interface in `$TMP` (new, or updated in place so the forms using it stay linked), with activation |
 
 ARC-1 extensions can only make HTTP calls, so the tools call remote-enabled function modules
 through the standard SOAP-RFC service.
@@ -111,7 +112,7 @@ agreement with them. The tools are not equal from this point of view:
 
 | Tool | What reaches the model |
 |---|---|
-| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite` | Form definitions: layout, texts and code. Customer code, but no business documents |
+| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite`, `Custom_AdobeInterfaceWrite` | Form definitions: layout, texts and code. Customer code, but no business documents |
 | `Custom_LaunchReport` | **Business data**: the report output (ALV rows or list), for example stock, prices, customers |
 | `Custom_PrintPreview` | **Business data**: the printed document, with addresses, prices and quantities. The PDF is saved locally and reaches the model when Claude reads or compares it, as the skills do to check a form |
 

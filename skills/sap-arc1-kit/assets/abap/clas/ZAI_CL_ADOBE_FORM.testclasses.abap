@@ -8,6 +8,7 @@ CLASS ltc_adobe_form DEFINITION FINAL
   PRIVATE SECTION.
     CONSTANTS gc_standard TYPE fpname VALUE 'FP_TEST_00'.
     CONSTANTS gc_copy     TYPE fpname VALUE 'ZAI_AF_UNITTEST'.
+    CONSTANTS gc_copy_if  TYPE fpname VALUE 'ZAI_AF_UNITTEST_IF'.
 
     DATA mo_cut TYPE REF TO zai_cl_adobe_form.
 
@@ -23,12 +24,17 @@ CLASS ltc_adobe_form DEFINITION FINAL
     METHODS ads_available          FOR TESTING.
     METHODS renew_timestamp        FOR TESTING.
     METHODS renew_timestamp_added  FOR TESTING.
+    METHODS interface_standard_refused FOR TESTING.
+    METHODS interface_invalid_xml      FOR TESTING.
+    METHODS interface_form_xml_refused FOR TESTING.
 
     "! The test form, or a tolerable failure if this system does not have it
     METHODS standard_form
       RETURNING VALUE(rs_form) TYPE zai_cl_adobe_form=>ty_form.
 
-    METHODS assert_no_tadir.
+    METHODS assert_no_tadir
+      IMPORTING iv_object TYPE trobjtype DEFAULT 'SFPF'
+                iv_name   TYPE fpname    DEFAULT gc_copy.
 ENDCLASS.
 
 
@@ -56,7 +62,7 @@ CLASS ltc_adobe_form IMPLEMENTATION.
 
   METHOD assert_no_tadir.
     SELECT SINGLE obj_name FROM tadir
-      WHERE pgmid = 'R3TR' AND object = 'SFPF' AND obj_name = @gc_copy
+      WHERE pgmid = 'R3TR' AND object = @iv_object AND obj_name = @iv_name
       INTO @DATA(lv_tadir).
     cl_abap_unit_assert=>assert_subrc( exp = 4
                                        msg = |TADIR entry { lv_tadir } created by a refused write| ).
@@ -182,5 +188,42 @@ CLASS ltc_adobe_form IMPLEMENTATION.
       `<xdp:xdp xmlns:xdp="http://ns.adobe.com/xdp/"/>` ) ) ).
     cl_abap_unit_assert=>assert_char_cp( act = lv_xml
                                          exp = `<xdp:xdp timeStamp="2*Z" xmlns:xdp="http://ns.adobe.com/xdp/"/>` ).
+  ENDMETHOD.
+
+  METHOD interface_standard_refused.
+    TRY.
+        mo_cut->write_interface( iv_name = 'SDOC_INTERFACE'
+                                 iv_xml  = cl_abap_codepage=>convert_to( `<a/>` ) ).
+        cl_abap_unit_assert=>fail( 'Write to a standard interface not refused' ).
+      CATCH zai_cx_adobe_form INTO DATA(lx_error).
+        cl_abap_unit_assert=>assert_char_cp( act = lx_error->get_text( )
+                                             exp = 'Writing allowed only for form interfaces*' ).
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD interface_invalid_xml.
+    TRY.
+        mo_cut->write_interface( iv_name = gc_copy_if
+                                 iv_xml  = cl_abap_codepage=>convert_to( `not xml` ) ).
+        cl_abap_unit_assert=>fail( 'Invalid interface XML not refused' ).
+      CATCH zai_cx_adobe_form INTO DATA(lx_error).
+        cl_abap_unit_assert=>assert_char_cp( act = lx_error->get_text( )
+                                             exp = 'Invalid*XML*' ).
+    ENDTRY.
+    assert_no_tadir( iv_object = 'SFPI' iv_name = gc_copy_if ).
+  ENDMETHOD.
+
+  METHOD interface_form_xml_refused.
+    " The XML of a form is not an interface: nothing is written
+    DATA(ls_form) = standard_form( ).
+    TRY.
+        mo_cut->write_interface( iv_name = gc_copy_if
+                                 iv_xml  = ls_form-form ).
+        cl_abap_unit_assert=>fail( 'Form XML accepted as interface' ).
+      CATCH zai_cx_adobe_form INTO DATA(lx_error).
+        cl_abap_unit_assert=>assert_char_cp( act = lx_error->get_text( )
+                                             exp = 'Invalid interface XML*' ).
+    ENDTRY.
+    assert_no_tadir( iv_object = 'SFPI' iv_name = gc_copy_if ).
   ENDMETHOD.
 ENDCLASS.

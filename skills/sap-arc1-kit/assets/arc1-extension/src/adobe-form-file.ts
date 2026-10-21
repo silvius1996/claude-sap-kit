@@ -56,3 +56,26 @@ export function interfaceFileName(name: string): string {
 export function backupFileNames(name: string, now: Date = new Date()): { form: string; layout: string } {
   return formFileNames(`${name}_${stamp(now)}`);
 }
+
+export function backupInterfaceFileName(name: string, now: Date = new Date()): string {
+  return interfaceFileName(`${name}_${stamp(now)}`);
+}
+
+// Same rule as the ABAP side, checked before any call so a refused name leaves no backup file behind.
+export function checkWritableName(name: string, kind: 'form' | 'interface'): string {
+  const upper = name.trim().toUpperCase();
+  if (!upper.startsWith('ZAI_')) {
+    throw new Error(`Writing allowed only for ${kind === 'interface' ? 'form interfaces' : 'Adobe forms'} ZAI_*: ${upper} refused`);
+  }
+  return upper;
+}
+
+// Interface XML as written by Custom_AdobeFormRead: the INTERFACE element points to the object (href).
+// The form XML has an INTERFACE element too, with the name only.
+export function checkInterfaceXml(data: Buffer): Buffer {
+  checkFormXml(data);
+  if (!/<(?:[\w-]+:)?INTERFACE\s+href=/.test(data.toString('utf8'))) {
+    throw new Error('The file is not the XML of a form interface (download it with Custom_AdobeFormRead)');
+  }
+  return data;
+}

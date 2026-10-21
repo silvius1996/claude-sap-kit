@@ -3,6 +3,8 @@
 "! ZAI_* forms ($TMP) of the current user. The SAP API updates the layout of a loaded form in place
 "! (LOAD in WRITE mode, SET_LAYOUT_DATA, SAVE) but cannot replace its context, so an existing ZAI_* copy
 "! is deleted and created again; customer and standard forms are never written or deleted.
+"! Form interfaces ZAI_* are created, or updated in place with the setters of the loaded interface: the forms
+"! that use them stay linked.
 CLASS zai_cl_adobe_form DEFINITION
   PUBLIC
   FINAL
@@ -41,6 +43,14 @@ CLASS zai_cl_adobe_form DEFINITION
       RETURNING VALUE(rs_result) TYPE ty_write_result
       RAISING   zai_cx_adobe_form.
 
+    "! Interface XML (as returned by read_interface) written as ZAI_* interface in $TMP and activated:
+    "! created if it does not exist, otherwise updated in place
+    METHODS write_interface
+      IMPORTING iv_name           TYPE fpname
+                iv_xml            TYPE xstring
+      RETURNING VALUE(rv_created) TYPE abap_bool
+      RAISING   zai_cx_adobe_form.
+
     "! Version of Adobe Document Services; exception if ADS is not configured
     METHODS ads_version
       RETURNING VALUE(rv_version) TYPE string
@@ -49,20 +59,44 @@ CLASS zai_cl_adobe_form DEFINITION
   PROTECTED SECTION.
   PRIVATE SECTION.
     TYPES: BEGIN OF ty_target,
-             form_exists  TYPE abap_bool,
-             tadir_exists TYPE abap_bool,
+             object_exists TYPE abap_bool,
+             tadir_exists  TYPE abap_bool,
            END OF ty_target.
 
-    CONSTANTS gc_xdp_namespace TYPE string VALUE `http://ns.adobe.com/xdp/`.
+    CONSTANTS gc_xdp_namespace   TYPE string VALUE `http://ns.adobe.com/xdp/`.
+    CONSTANTS gc_object_form      TYPE trobjtype VALUE 'SFPF'.
+    CONSTANTS gc_object_interface TYPE trobjtype VALUE 'SFPI'.
 
     METHODS check_target
       IMPORTING iv_name          TYPE fpname
+                iv_object        TYPE trobjtype DEFAULT gc_object_form
       RETURNING VALUE(rs_target) TYPE ty_target
       RAISING   zai_cx_adobe_form.
 
     METHODS tadir_exists
       IMPORTING iv_name          TYPE fpname
+                iv_object        TYPE trobjtype DEFAULT gc_object_form
       RETURNING VALUE(rv_exists) TYPE abap_bool.
+
+    METHODS to_interface
+      IMPORTING iv_xml              TYPE xstring
+      RETURNING VALUE(ri_interface) TYPE REF TO if_fp_interface
+      RAISING   zai_cx_adobe_form.
+
+    METHODS update_interface
+      IMPORTING iv_name      TYPE fpname
+                ii_interface TYPE REF TO if_fp_interface
+      RAISING   zai_cx_adobe_form.
+
+    METHODS create_interface
+      IMPORTING iv_name      TYPE fpname
+                ii_interface TYPE REF TO if_fp_interface
+      RAISING   zai_cx_adobe_form.
+
+    "! Parameters, global definitions, coding and reference fields
+    METHODS copy_interface_data
+      IMPORTING ii_from TYPE REF TO if_fp_interface_data
+                ii_to   TYPE REF TO if_fp_interface_data.
 
     "! Parses the XML and removes the indentation between elements
     METHODS parse
@@ -96,6 +130,7 @@ CLASS zai_cl_adobe_form DEFINITION
 
     METHODS tadir_entry
       IMPORTING iv_name   TYPE fpname
+                iv_object TYPE trobjtype DEFAULT gc_object_form
                 iv_delete TYPE abap_bool DEFAULT abap_false
       RAISING   zai_cx_adobe_form.
 
@@ -105,7 +140,8 @@ CLASS zai_cl_adobe_form DEFINITION
       RAISING   zai_cx_adobe_form.
 
     METHODS activate
-      IMPORTING iv_name TYPE fpname
+      IMPORTING iv_name   TYPE fpname
+                iv_object TYPE trobjtype DEFAULT gc_object_form
       RAISING   zai_cx_adobe_form.
 
     METHODS function_module
@@ -219,7 +255,7 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     rs_result-ads_version = ads_version( ).
 
     " The context cannot be replaced in place: the own copy is deleted and created again (the tool saves a backup first)
-    IF ls_target-form_exists = abap_true.
+    IF ls_target-object_exists = abap_true.
       delete_copy( iv_name ).
     ENDIF.
     DATA(lv_new_tadir) = xsdbool( tadir_exists( iv_name ) = abap_false ).
@@ -242,14 +278,145 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
         RAISE EXCEPTION TYPE zai_cx_adobe_form
           EXPORTING
             iv_text  = lx_error->get_text( ) &&
-                       COND #( WHEN ls_target-form_exists = abap_true
+                       COND #( WHEN ls_target-object_exists = abap_true
                                THEN ` (the previous version of the copy was already deleted: upload the backup again)` )
             previous = lx_error.
     ENDTRY.
 
     activate( iv_name ).
     rs_result-fm_name = function_module( iv_name ).
-    rs_result-created = xsdbool( ls_target-form_exists = abap_false ).
+    rs_result-created = xsdbool( ls_target-object_exists = abap_false ).
+  ENDMETHOD.
+
+  METHOD write_interface.
+    " All checks before any change in the system
+    DATA(ls_target) = check_target( iv_name   = iv_name
+                                    iv_object = gc_object_interface ).
+    DATA(li_interface) = to_interface( iv_xml ).
+    IF li_interface->get_interface_type( ) = if_fp_interface=>c_interface_type_xsd.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Form interface { iv_name }: XML schema based interfaces are not supported|.
+    ENDIF.
+
+    IF ls_target-object_exists = abap_true.
+      update_interface( iv_name      = iv_name
+                        ii_interface = li_interface ).
+    ELSE.
+      DATA(lv_new_tadir) = xsdbool( ls_target-tadir_exists = abap_false ).
+      IF lv_new_tadir = abap_true.
+        tadir_entry( iv_name   = iv_name
+                     iv_object = gc_object_interface ).
+      ENDIF.
+      TRY.
+          create_interface( iv_name      = iv_name
+                            ii_interface = li_interface ).
+        CATCH zai_cx_adobe_form INTO DATA(lx_error).
+          " The TADIR entry created here must not be left orphaned
+          IF lv_new_tadir = abap_true.
+            TRY.
+                tadir_entry( iv_name   = iv_name
+                             iv_object = gc_object_interface
+                             iv_delete = abap_true ).
+              CATCH zai_cx_adobe_form ##NO_HANDLER.
+            ENDTRY.
+          ENDIF.
+          RAISE EXCEPTION lx_error.
+      ENDTRY.
+    ENDIF.
+
+    activate( iv_name   = iv_name
+              iv_object = gc_object_interface ).
+    rv_created = xsdbool( ls_target-object_exists = abap_false ).
+  ENDMETHOD.
+
+  METHOD to_interface.
+    " The XML of a form also has an INTERFACE element, with the name only: the interface object has a reference
+    DATA(li_document) = parse( iv_xml ).
+    DATA(li_root) = li_document->find_from_name( name = 'INTERFACE' ).
+    IF li_root IS NOT BOUND OR li_root->get_attribute( 'href' ) IS INITIAL.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Invalid interface XML: not the XML of a form interface (use Custom_AdobeFormRead)|.
+    ENDIF.
+    TRY.
+        ri_interface = cl_fp_helper=>convert_xstring_to_interface( render( ii_document = li_document
+                                                                           iv_pretty   = abap_false ) ).
+      CATCH cx_fp_api INTO DATA(lx_error).
+        RAISE EXCEPTION TYPE zai_cx_adobe_form
+          EXPORTING
+            iv_text  = |Invalid interface XML: { lx_error->get_text( ) }|
+            previous = lx_error.
+    ENDTRY.
+    IF ri_interface IS NOT BOUND.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form EXPORTING iv_text = |Invalid interface XML: no form interface found|.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD update_interface.
+    " In place: the forms that use the interface stay linked to it
+    DATA li_current TYPE REF TO if_fp_interface.
+    TRY.
+        DATA(li_wb_interface) = cl_fp_wb_interface=>load( i_name = iv_name
+                                                          i_mode = if_fp_wb_object=>c_mode_write ).
+        li_current ?= li_wb_interface->get_object( ).
+        IF li_current->get_interface_type( ) <> ii_interface->get_interface_type( ).
+          li_wb_interface->free( ).
+          RAISE EXCEPTION TYPE zai_cx_adobe_form
+            EXPORTING
+              iv_text = |Form interface { iv_name }: the interface type cannot be changed | &&
+                        |({ li_current->get_interface_type( ) } -> { ii_interface->get_interface_type( ) })|.
+        ENDIF.
+        copy_interface_data( ii_from = ii_interface->get_interface_data( )
+                             ii_to   = li_current->get_interface_data( ) ).
+        li_wb_interface->save( ).
+        li_wb_interface->free( ).
+      CATCH cx_fp_api INTO DATA(lx_error).
+        RAISE EXCEPTION TYPE zai_cx_adobe_form
+          EXPORTING
+            iv_text  = |Form interface { iv_name } not updated: { lx_error->get_text( ) }|
+            previous = lx_error.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD create_interface.
+    DATA lv_transport TYPE trkorr.
+    TRY.
+        DATA(li_wb_interface) = cl_fp_wb_interface=>create( i_name      = iv_name
+                                                            i_interface = ii_interface
+                                                            i_ordernum  = lv_transport ).
+        li_wb_interface->save( ).
+        li_wb_interface->free( ).
+      CATCH cx_fp_api INTO DATA(lx_error).
+        RAISE EXCEPTION TYPE zai_cx_adobe_form
+          EXPORTING
+            iv_text  = |Form interface { iv_name } not saved: { lx_error->get_text( ) }|
+            previous = lx_error.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD copy_interface_data.
+    DATA(li_from_parameters) = ii_from->get_parameters( ).
+    DATA(li_to_parameters)   = ii_to->get_parameters( ).
+    li_to_parameters->set_import_parameters( li_from_parameters->get_import_parameters( ) ).
+    li_to_parameters->set_export_parameters( li_from_parameters->get_export_parameters( ) ).
+    li_to_parameters->set_table_parameters( li_from_parameters->get_table_parameters( ) ).
+    li_to_parameters->set_exceptions( li_from_parameters->get_exceptions( ) ).
+
+    DATA(li_from_globals) = ii_from->get_global_definitions( ).
+    DATA(li_to_globals)   = ii_to->get_global_definitions( ).
+    li_to_globals->set_types( li_from_globals->get_types( ) ).
+    li_to_globals->set_global_data( li_from_globals->get_global_data( ) ).
+    li_to_globals->set_fieldsymbols( li_from_globals->get_fieldsymbols( ) ).
+
+    DATA(li_from_coding) = ii_from->get_coding( ).
+    DATA(li_to_coding)   = ii_to->get_coding( ).
+    li_to_coding->set_init_input_params( li_from_coding->get_init_input_params( ) ).
+    li_to_coding->set_init_output_params( li_from_coding->get_init_output_params( ) ).
+    li_to_coding->set_init_coding( li_from_coding->get_init_coding( ) ).
+    li_to_coding->set_forms_coding( li_from_coding->get_forms_coding( ) ).
+
+    ii_to->get_reference_fields( )->set_reference_fields( ii_from->get_reference_fields( )->get_reference_fields( ) ).
   ENDMETHOD.
 
   METHOD ads_version.
@@ -270,43 +437,53 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD check_target.
+    DATA(lv_kind) = COND string( WHEN iv_object = gc_object_interface THEN `Form interface` ELSE `Adobe form` ).
     IF iv_name NP gc_writable_pattern.
       RAISE EXCEPTION TYPE zai_cx_adobe_form
         EXPORTING
-          iv_text = |Writing allowed only for Adobe forms { gc_writable_pattern }: { iv_name } refused|.
+          iv_text = |Writing allowed only for { COND string( WHEN iv_object = gc_object_interface
+                                                             THEN `form interfaces` ELSE `Adobe forms` ) } | &&
+                    |{ gc_writable_pattern }: { iv_name } refused|.
     ENDIF.
 
     SELECT SINGLE devclass, author FROM tadir
       WHERE pgmid    = 'R3TR'
-        AND object   = 'SFPF'
+        AND object   = @iv_object
         AND obj_name = @iv_name
       INTO @DATA(ls_tadir).
     IF sy-subrc = 0.
       IF ls_tadir-devclass <> '$TMP' OR ls_tadir-author <> sy-uname.
         RAISE EXCEPTION TYPE zai_cx_adobe_form
           EXPORTING
-            iv_text = |Adobe form { iv_name } cannot be changed: package { ls_tadir-devclass }, author { ls_tadir-author }|.
+            iv_text = |{ lv_kind } { iv_name } cannot be changed: package { ls_tadir-devclass }, author { ls_tadir-author }|.
       ENDIF.
       rs_target-tadir_exists = abap_true.
     ENDIF.
 
     " Any version, active or not
-    SELECT SINGLE name FROM fplayout
-      WHERE name = @iv_name
-      INTO @DATA(lv_name).
-    rs_target-form_exists = xsdbool( sy-subrc = 0 ).
-    " Without object directory entry the form is not a copy of the kit: it is never deleted
-    IF rs_target-form_exists = abap_true AND rs_target-tadir_exists = abap_false.
+    DATA lv_name TYPE fpname.
+    IF iv_object = gc_object_interface.
+      SELECT SINGLE name FROM fpinterface
+        WHERE name = @iv_name
+        INTO @lv_name.
+    ELSE.
+      SELECT SINGLE name FROM fplayout
+        WHERE name = @iv_name
+        INTO @lv_name.
+    ENDIF.
+    rs_target-object_exists = xsdbool( sy-subrc = 0 ).
+    " Without object directory entry the object is not a copy of the kit: it is never changed
+    IF rs_target-object_exists = abap_true AND rs_target-tadir_exists = abap_false.
       RAISE EXCEPTION TYPE zai_cx_adobe_form
         EXPORTING
-          iv_text = |Adobe form { lv_name } exists without object directory entry: not changed|.
+          iv_text = |{ lv_kind } { lv_name } exists without object directory entry: not changed|.
     ENDIF.
   ENDMETHOD.
 
   METHOD tadir_exists.
     SELECT SINGLE @abap_true FROM tadir
       WHERE pgmid    = 'R3TR'
-        AND object   = 'SFPF'
+        AND object   = @iv_object
         AND obj_name = @iv_name
       INTO @rv_exists.
   ENDMETHOD.
@@ -438,7 +615,7 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
         wi_test_modus         = space
         wi_delete_tadir_entry = iv_delete
         wi_tadir_pgmid        = 'R3TR'
-        wi_tadir_object       = 'SFPF'
+        wi_tadir_object       = iv_object
         wi_tadir_obj_name     = CONV sobj_name( iv_name )
         wi_tadir_devclass     = COND devclass( WHEN iv_delete = abap_false THEN '$TMP' )
       EXCEPTIONS
@@ -481,7 +658,7 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
 
   METHOD activate.
     DATA lt_objects TYPE STANDARD TABLE OF dwinactiv WITH DEFAULT KEY.
-    lt_objects = VALUE #( ( object = 'SFPF' obj_name = iv_name ) ).
+    lt_objects = VALUE #( ( object = iv_object obj_name = iv_name ) ).
 
     " Same call as abapGit; UI_DECOUPLED does not exist on every release
     TRY.
@@ -513,7 +690,7 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     IF sy-subrc <> 0.
       RAISE EXCEPTION TYPE zai_cx_adobe_form
         EXPORTING
-          iv_text = |Adobe form { iv_name } saved but not activated (return code { sy-subrc }): | &&
+          iv_text = |{ iv_object } { iv_name } saved but not activated (return code { sy-subrc }): | &&
                     |{ sy-msgid } { sy-msgno } { sy-msgv1 } { sy-msgv2 }|.
     ENDIF.
   ENDMETHOD.

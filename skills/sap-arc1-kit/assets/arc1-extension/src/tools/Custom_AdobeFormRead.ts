@@ -41,7 +41,8 @@ export default defineTool({
   description:
     'Downloads any Adobe form (SFP, standard ones included) and saves three files locally: the form as XML ' +
     'without layout (context, properties), the layout as XDP and the form interface as XML. Returns the paths. ' +
-    'Form and layout can be edited and uploaded again with Custom_AdobeFormWrite. Changes nothing in SAP.',
+    'Form and layout can be edited and uploaded again with Custom_AdobeFormWrite, the interface with ' +
+    'Custom_AdobeInterfaceWrite. Changes nothing in SAP.',
   schema,
   policy: { scope: 'write', opType: OperationType.Workflow },
   availableOn: 'onprem',

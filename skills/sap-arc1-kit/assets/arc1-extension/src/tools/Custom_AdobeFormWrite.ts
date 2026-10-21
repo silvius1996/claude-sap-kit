@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
 import { defineTool, OperationType, type ToolContext } from 'arc-1/public';
-import { backupFileNames, checkFormXml, checkLayout, decodeFormXml, decodeLayout } from '../adobe-form-file.js';
+import { backupFileNames, checkFormXml, checkLayout, checkWritableName, decodeFormXml, decodeLayout } from '../adobe-form-file.js';
 import { savePdf as saveFile } from '../pdf-file.js';
 import { readLocalFile } from '../smartform-file.js';
 import { buildEnvelope, readElement, readFault } from '../soap-rfc.js';
@@ -43,8 +43,8 @@ export default defineTool({
   availableOn: 'onprem',
   async handler(args, ctx) {
     const a = args as Args;
-    const name = a.name.trim().toUpperCase();
     try {
+      const name = checkWritableName(a.name, 'form');
       const form = checkFormXml(await readLocalFile(a.form));
       const layout = checkLayout(await readLocalFile(a.layout));
 

@@ -1,6 +1,6 @@
 ---
 name: sap-arc1-kit
-description: Installs on an SAP system (on-premise, through the ARC-1 MCP server) the tool kit that lets Claude run reports with variants/selection values and read the ALV output, create PDF previews of NAST print output, read and edit SmartForms as XML, replace a customer form with the approved copy, and read and copy Adobe forms (SFP) as XML + XDP. Use it when starting a new SAP project and the tools Custom_LaunchReport, Custom_PrintPreview, Custom_SmartFormRead/Write/Replace, Custom_AdobeFormRead/Write are not available, when the user asks to "install/port the tools", "prepare the system", "set up the report launcher or SmartForms tools" on a new system or client, or when the skills sap-report-launcher / sap-smartform-xml / sap-adobe-form report that the tools are missing.
+description: Installs on an SAP system (on-premise, through the ARC-1 MCP server) the tool kit that lets Claude run reports with variants/selection values and read the ALV output, create PDF previews of NAST print output, read and edit SmartForms as XML, replace a customer form with the approved copy, and read and copy Adobe forms (SFP) as XML + XDP with their form interfaces. Use it when starting a new SAP project and the tools Custom_LaunchReport, Custom_PrintPreview, Custom_SmartFormRead/Write/Replace, Custom_AdobeFormRead/Write, Custom_AdobeInterfaceWrite are not available, when the user asks to "install/port the tools", "prepare the system", "set up the report launcher or SmartForms tools" on a new system or client, or when the skills sap-report-launcher / sap-smartform-xml / sap-adobe-form report that the tools are missing.
 ---
 
 # ARC-1 kit: installation on a new SAP system
@@ -9,8 +9,8 @@ The kit has two parts that are installed together:
 
 | Part | Where | Content (default prefix `ZAI`) |
 |---|---|---|
-| ABAP | SAP system | 4 exception classes, 4 logic classes, function group `ZAI_FG_LAUNCHER` with 8 function modules (7 remote-enabled) |
-| ARC-1 extension | PC, project folder | 7 MCP tools: `Custom_LaunchReport`, `Custom_PrintPreview`, `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite` |
+| ABAP | SAP system | 4 exception classes, 4 logic classes, function group `ZAI_FG_LAUNCHER` with 9 function modules (8 remote-enabled) |
+| ARC-1 extension | PC, project folder | 8 MCP tools: `Custom_LaunchReport`, `Custom_PrintPreview`, `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite`, `Custom_AdobeInterfaceWrite` |
 
 The tools call the function modules through the standard SOAP-RFC service (`/sap/bc/soap/rfc`),
 because ARC-1 extensions can only make HTTP calls.
@@ -84,8 +84,8 @@ pass its content unchanged.
    `<PREFIX>_CL_ADOBE_FORM` (files `.clas.abap`) → `SAPWrite create type=CLAS`.
 6. **Remote-enabled FMs** `<PREFIX>_RUN_REPORT`, `<PREFIX>_RUN_PRINT_PREVIEW`, `<PREFIX>_SMARTFORM_READ`,
    `<PREFIX>_SMARTFORM_WRITE`, `<PREFIX>_SMARTFORM_REPLACE`, `<PREFIX>_ADOBE_FORM_READ`,
-   `<PREFIX>_ADOBE_FORM_WRITE` → `type=FUNC`, `processingType: rfc`.
-7. **One activation** with `SAPActivate objects=[...]` of: the 4 classes, the include, the 8 FUNC
+   `<PREFIX>_ADOBE_FORM_WRITE`, `<PREFIX>_ADOBE_INTERFACE_WRITE` → `type=FUNC`, `processingType: rfc`.
+7. **One activation** with `SAPActivate objects=[...]` of: the 4 classes, the include, the 9 FUNC
    (with `group`) and the FUGR. New FMs stay inactive if only the FUGR is activated: they must
    be listed explicitly.
 8. **Tests** (`.testclasses.abap`) → `SAPWrite update include=testclasses` for each class,
@@ -93,10 +93,10 @@ pass its content unchanged.
 
 ## Step 3 — Checks on the system
 
-- `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 7 entry
+- `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 8 entry
   FMs with `FMODE = 'R'`, `<PREFIX>_PRINT_CALL_ROUTINE` empty.
 - `SAPDiagnose unittest` on the 4 classes: 8 (report launcher) + 10 (print preview) + 14 (SmartForms)
-  + 11 (Adobe forms) tests, no errors. Tests that find no
+  + 14 (Adobe forms) tests, no errors. Tests that find no
   suitable data on the system end with a **tolerable** assertion (`CL_ABAP_UNIT_ASSERT=>SKIP`
   does not exist on 7.50): ARC-1 then reports the class as `failed` with `severity: tolerable`.
   This is expected, not a problem, when the message says what is missing:
@@ -113,7 +113,7 @@ pass its content unchanged.
 ## Step 4 — ARC-1 extension
 
 1. Copy `sap-kit/arc1-extension` into the project folder (e.g. `<project>/arc1-extension`).
-2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 25 Node tests).
+2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 27 Node tests).
    `--ignore-scripts` skips the native build of ARC-1 dependencies, which the extension does
    not need.
 3. In `.mcp.json`, in the ARC-1 server, add to `env`:

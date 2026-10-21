@@ -2,8 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   backupFileNames,
+  backupInterfaceFileName,
   checkFormXml,
+  checkInterfaceXml,
   checkLayout,
+  checkWritableName,
   decodeFormXml,
   decodeLayout,
   findInterfaceName,
@@ -41,8 +44,24 @@ test('layout: only XDP is accepted', () => {
   assert.throws(() => decodeLayout(''), /not an XDP/);
 });
 
+test('interface XML: object reference required, the form XML is refused', () => {
+  const xml = Buffer.from('<?xml version="1.0"?>\n<asx:abap>\n <asx:values>\n  <INTERFACE href="#o46"/>\n </asx:values>\n</asx:abap>');
+  assert.deepEqual(checkInterfaceXml(xml), xml);
+  assert.throws(() => checkInterfaceXml(FORM), /not the XML of a form interface/);
+  assert.throws(() => checkInterfaceXml(Buffer.from('%PDF-1.7')), /not an XML/);
+  const now = new Date(Date.UTC(2026, 9, 20, 8, 1, 2));
+  assert.equal(backupInterfaceFileName('zai_af_test_if', now), 'ZAI_AF_TEST_IF_20261020_080102.interface.xml');
+});
+
 test('interface name read from the form XML, with or without namespace prefix', () => {
   assert.equal(findInterfaceName(FORM), 'FP_TEST_IF_00');
   assert.equal(findInterfaceName(Buffer.from('<x:INTERFACE> /abc/if_order </x:INTERFACE>')), '/ABC/IF_ORDER');
   assert.equal(findInterfaceName(Buffer.from('<FORM><NAME>X</NAME></FORM>')), undefined);
+});
+
+test('writable names: only ZAI_*, checked before any call', () => {
+  assert.equal(checkWritableName(' zai_af_test_if ', 'interface'), 'ZAI_AF_TEST_IF');
+  assert.equal(checkWritableName('ZAI_AF_TEST', 'form'), 'ZAI_AF_TEST');
+  assert.throws(() => checkWritableName('SDOC_INTERFACE', 'interface'), /form interfaces ZAI_\*: SDOC_INTERFACE refused/);
+  assert.throws(() => checkWritableName('ZSD_FORM', 'form'), /Adobe forms ZAI_\*: ZSD_FORM refused/);
 });
