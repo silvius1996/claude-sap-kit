@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checkReplaceRules, matchesPackage, readRules } from '../dist/project-rules.js';
+import { checkAuthorFlag, checkReplaceRules, matchesPackage, readRules } from '../dist/project-rules.js';
 
 const DEV_RULES = {
   SAP_ALLOW_TRANSPORT_WRITES: 'true',
@@ -48,4 +48,10 @@ test('checkReplaceRules with a shared user: request in the list', () => {
 test('checkReplaceRules: missing SAP_ALLOWED_PACKAGES blocks everything', () => {
   const r = readRules({ SAP_ALLOW_TRANSPORT_WRITES: 'true' });
   assert.match(checkReplaceRules(r, { devclass: 'ZSD', transport: 'T' })[0], /SAP_ALLOWED_PACKAGES/);
+});
+
+test('checkAuthorFlag: a check switched off is sent as "-", never empty', () => {
+  // SOAP-RFC drops empty parameters and the FM default 'X' would turn the check on again
+  assert.equal(checkAuthorFlag(readRules({ ZAI_CHECK_AUTHOR: 'false' })), '-');
+  assert.equal(checkAuthorFlag(readRules({})), 'X');
 });
