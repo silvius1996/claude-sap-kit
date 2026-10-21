@@ -15,6 +15,10 @@ CLASS zai_cl_print_preview DEFINITION
            END OF ty_result.
 
     CONSTANTS gc_title_prefix TYPE string VALUE `Claude preview`.
+    CONSTANTS gc_kind_smartform TYPE char1 VALUE 'S'.
+    CONSTANTS gc_kind_adobe     TYPE char1 VALUE 'A'.
+    "! TNAPR-FORMTYPE of an Adobe form
+    CONSTANTS gc_formtype_pdf   TYPE tnapr-formtype VALUE '2'.
 
     METHODS run
       IMPORTING iv_document      TYPE nast-objky
@@ -50,6 +54,11 @@ CLASS zai_cl_print_preview DEFINITION
                 iv_routine      TYPE tnapr-ronam
       RETURNING VALUE(rs_tnapr) TYPE tnapr
       RAISING   zai_cx_print_preview.
+
+    "! SmartForms (gc_kind_smartform), active Adobe form (gc_kind_adobe) or empty if neither
+    METHODS form_kind
+      IMPORTING iv_form        TYPE tdsfname
+      RETURNING VALUE(rv_kind) TYPE char1.
 
   PROTECTED SECTION.
   PRIVATE SECTION.
@@ -197,28 +206,76 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
     ENDIF.
 
     DATA lv_fm_name TYPE rs38l_fnam.
-    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
-      EXPORTING
-        formname           = iv_form
-      IMPORTING
-        fm_name            = lv_fm_name
-      EXCEPTIONS
-        no_form            = 1
-        no_function_module = 2
-        OTHERS             = 3.
-    IF sy-subrc <> 0.
-      RAISE EXCEPTION TYPE zai_cx_print_preview
-        EXPORTING
-          iv_text = |SmartForms { iv_form } does not exist or is not active|.
-    ENDIF.
+    DATA lx_adobe   TYPE REF TO cx_root.
+    DATA(lv_kind) = form_kind( iv_form ).
+    CASE lv_kind.
+      WHEN gc_kind_smartform.
+        CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+          EXPORTING
+            formname           = iv_form
+          IMPORTING
+            fm_name            = lv_fm_name
+          EXCEPTIONS
+            no_form            = 1
+            no_function_module = 2
+            OTHERS             = 3.
+        IF sy-subrc <> 0.
+          RAISE EXCEPTION TYPE zai_cx_print_preview
+            EXPORTING
+              iv_text = |SmartForms { iv_form } does not exist or is not active|.
+        ENDIF.
+      WHEN gc_kind_adobe.
+        TRY.
+            CALL FUNCTION 'FP_FUNCTION_MODULE_NAME'
+              EXPORTING
+                i_name     = CONV fpname( iv_form )
+              IMPORTING
+                e_funcname = lv_fm_name.
+          CATCH cx_fp_api_repository cx_fp_api_usage cx_fp_api_internal INTO lx_adobe.
+            RAISE EXCEPTION TYPE zai_cx_print_preview
+              EXPORTING
+                iv_text  = |Adobe form { iv_form } has no function module: { lx_adobe->get_text( ) }|
+                previous = lx_adobe.
+        ENDTRY.
+      WHEN OTHERS.
+        RAISE EXCEPTION TYPE zai_cx_print_preview
+          EXPORTING
+            iv_text = |Form { iv_form } does not exist or is not active (neither SmartForms nor Adobe form)|.
+    ENDCASE.
 
-    " Configuration in memory only: TNAPR is neither read nor written
+    " Configuration in memory only: TNAPR is not written. Form type (domain NA_FORMTYPE): always
+    " 2 = PDF for an Adobe form; for SmartForms the configured one (empty or 1) when that is a SmartForms too
     rs_tnapr = VALUE #( kappl = is_nast-kappl
                         kschl = is_nast-kschl
                         nacha = '1'
                         pgnam = lv_program
                         ronam = iv_routine
                         sform = iv_form ).
+    IF lv_kind = gc_kind_adobe.
+      rs_tnapr-formtype = gc_formtype_pdf.
+    ELSE.
+      SELECT SINGLE sform, formtype FROM tnapr
+        WHERE kappl = @is_nast-kappl
+          AND kschl = @is_nast-kschl
+          AND nacha = '1'
+        INTO @DATA(ls_configured).
+      IF sy-subrc = 0 AND ls_configured-sform IS NOT INITIAL
+         AND form_kind( CONV #( ls_configured-sform ) ) = gc_kind_smartform.
+        rs_tnapr-formtype = ls_configured-formtype.
+      ENDIF.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD form_kind.
+    SELECT SINGLE @gc_kind_smartform FROM stxfadm
+      WHERE formname = @iv_form
+      INTO @rv_kind.
+    IF sy-subrc <> 0.
+      SELECT SINGLE @gc_kind_adobe FROM fplayout
+        WHERE name  = @iv_form
+          AND state = 'A'
+        INTO @rv_kind.
+    ENDIF.
   ENDMETHOD.
 
   METHOD prepare_nast.

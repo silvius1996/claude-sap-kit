@@ -21,7 +21,7 @@ const schema = z.object({
   partner: z.string().max(10).optional().describe('Message partner when there is more than one.'),
   device: z.string().min(1).max(4).optional().describe('Output device (default LP01, no immediate printing).'),
   outputDir: z.string().optional().describe('Folder where the PDF is saved (default: output/print-preview in the project).'),
-  form: z.string().min(1).max(30).optional().describe('SmartForms to use instead of the configured one (requires program and routine).'),
+  form: z.string().min(1).max(30).optional().describe('SmartForms or Adobe form to use instead of the configured one (requires program and routine).'),
   program: z.string().min(1).max(40).optional().describe('Print program to use with form, e.g. RLE_DELNOTE.'),
   routine: z.string().min(1).max(30).optional().describe('Print program routine to use with form, e.g. ENTRY.'),
 });
@@ -34,7 +34,7 @@ export default defineTool({
     'Creates the PDF of the print output of an SD document (NAST message, print medium) by running the print program ' +
     'to spool and converting the spool to PDF; saves the file locally and returns its path. ' +
     'The spool stays in SP01. Does not create or change NAST messages. Does not cover S/4 Output Management (APOC). ' +
-    'With form/program/routine it tries out a form that is not configured yet (TNAPR replaced in memory only).',
+    'With form/program/routine it tries out a SmartForms or Adobe form that is not configured yet (TNAPR replaced in memory only).',
   schema,
   policy: { scope: 'write', opType: OperationType.Workflow },
   availableOn: 'onprem',

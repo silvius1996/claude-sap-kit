@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.6.0
+
+Adobe forms (Interactive Forms by Adobe, transaction SFP). Tested live on S/4HANA (SAP_BASIS 816) with ADS:
+read of `FP_TEST_00` and of the sales document form `SD_SDOC_FORM01`, copy, preview of an order with the copy
+(same text as the original), text change in the XDP, preview and rollback; a new printed field read from a `Z`
+form interface; update in place of that interface (initialization code), preview, creation of a second interface,
+refusals and rollback from the backup. Not tested live on SAP_BASIS 7.50 (ECC) yet: the ABAP sources pass
+abaplint with the v750 syntax only.
+
+- `Custom_AdobeFormRead`: downloads any Adobe form as three files, as abapGit does: the form XML without layout
+  (`<NAME>.form.xml`, one element per line), the layout as XDP (`<NAME>.xdp`) and the form interface
+  (`<INTERFACE>.interface.xml`, found in the form XML or passed explicitly).
+- `Custom_AdobeFormWrite`: uploads form XML + XDP as a `ZAI_*` copy in `$TMP` of the logged-on user, activates it and
+  returns the generated function module. Checks Adobe Document Services (ADS) first. The SAP API updates the layout
+  of a loaded form in place but cannot replace its context (abapGit deletes and creates the form again too), so an
+  existing copy is deleted and created again after a local backup; customer and standard forms are never written.
+  The `timeStamp` of the `xdp` element is renewed at every write, as LiveCycle Designer does: ADS caches the template
+  under `timeStamp` and `uuid`, and a changed layout with the old `timeStamp` was printed unchanged.
+- `Custom_AdobeInterfaceWrite`: uploads an interface XML (parameters, global data, types, initialization code,
+  reference fields) as a `ZAI_*` form interface in `$TMP` and activates it. Unlike forms, an existing `ZAI_*`
+  interface is updated in place with the setters of `IF_FP_INTERFACE_DATA`, so the forms using it stay linked and
+  print the change at the next preview, without being regenerated; its current version is saved first in
+  `output/adobe-forms/backup`, and uploading the backup is the rollback. Refuses non-`ZAI_*` names (checked
+  before any call, so no backup file is written for them), interfaces of other users or outside `$TMP`, XML schema
+  based interfaces, a change of interface type, and a file that is not an interface XML (such as a form XML).
+  Both write tools now check the `ZAI_*` name locally first.
+- `Custom_PrintPreview`: `form` also accepts an active Adobe form, always with form type `2` (PDF, domain
+  `NA_FORMTYPE`): print programs such as `SD_SDOC_PRINT01` refuse a form of another type. For SmartForms the form type
+  comes from the TNAPR entry of the output type when its form is a SmartForms too.
+- New ABAP objects `ZAI_CL_ADOBE_FORM`, `ZAI_CX_ADOBE_FORM` and the remote-enabled FMs `ZAI_ADOBE_FORM_READ`,
+  `ZAI_ADOBE_FORM_WRITE`, `ZAI_ADOBE_INTERFACE_WRITE`; 14 ABAP Unit tests (harmless) for the new class, 2 more for
+  the preview. 27 Node tests for the extension.
+- New skill `sap-adobe-form`: workflow copy → preview → change → compare, how to find one's way in the XDP and in the
+  context, how to add a printed field through a `ZAI_*` interface, errors and limits. Replacing the original form
+  under a transport request is not part of this version.
+
 ## 0.5.2
 
 Skills reviewed against Anthropic's skill authoring best practices. No change to the tools or the ABAP sources.

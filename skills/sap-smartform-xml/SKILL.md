@@ -1,6 +1,6 @@
 ---
 name: sap-smartform-xml
-description: Reads, copies and edits SAP SmartForms without SAP GUI through XML (ARC-1 tools Custom_SmartFormRead/Custom_SmartFormWrite) and checks the result by creating the PDF preview of a real document (Custom_PrintPreview), even with a form not yet configured in NACE/TNAPR. Use it when the user wants to change texts, addresses, logos, windows or logic of a print form (delivery note, invoice, order, confirmation), make a Z copy of a standard form, replace a customer form with the changed and approved version (Custom_SmartFormReplace, under a transport request), see how a SmartForms is built, find where a printed field comes from, or see the PDF preview of an SD/MM document with a NAST message, even without saying "SmartForms" or "XML". Not for Adobe Forms (SFP) or S/4 Output Management (BRF+/APOC).
+description: Reads, copies and edits SAP SmartForms without SAP GUI through XML (ARC-1 tools Custom_SmartFormRead/Custom_SmartFormWrite) and checks the result by creating the PDF preview of a real document (Custom_PrintPreview), even with a form not yet configured in NACE/TNAPR. Use it when the user wants to change texts, addresses, logos, windows or logic of a print form (delivery note, invoice, order, confirmation), make a Z copy of a standard form, replace a customer form with the changed and approved version (Custom_SmartFormReplace, under a transport request), see how a SmartForms is built, find where a printed field comes from, or see the PDF preview of an SD/MM document with a NAST message, even without saying "SmartForms" or "XML". Not for Adobe Forms (SFP, skill sap-adobe-form) or S/4 Output Management (BRF+/APOC).
 ---
 
 # SmartForms via XML, checked on the PDF
@@ -133,7 +133,7 @@ If the program is not print-only, ask for confirmation before running it.
 
 ## Limits
 
-- SmartForms only (not Adobe Forms, not SAPscript for editing; SAPscript and Adobe forms can
-  still be previewed with `Custom_PrintPreview`).
+- SmartForms only: Adobe forms with the skill `sap-adobe-form`; SAPscript forms can only be
+  previewed with `Custom_PrintPreview`.
 - NAST messages only; no S/4 Output Management (APOC).
 - The PDF comparison is text-based: positions and graphics must be checked by the user on the PDF.

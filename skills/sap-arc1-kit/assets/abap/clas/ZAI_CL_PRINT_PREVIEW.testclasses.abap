@@ -19,6 +19,8 @@ CLASS ltc_print_preview DEFINITION FINAL
     METHODS override_incomplete    FOR TESTING.
     METHODS override_form_missing  FOR TESTING.
     METHODS override_ok            FOR TESTING RAISING cx_static_check.
+    METHODS form_kind              FOR TESTING.
+    METHODS override_adobe_ok      FOR TESTING RAISING cx_static_check.
 ENDCLASS.
 
 
@@ -161,5 +163,28 @@ CLASS ltc_print_preview IMPLEMENTATION.
                                         exp = 'RLE_DELNOTE' ).
     cl_abap_unit_assert=>assert_equals( act = ls_tnapr-kschl
                                         exp = 'LD00' ).
+  ENDMETHOD.
+
+  METHOD form_kind.
+    cl_abap_unit_assert=>assert_equals( act = mo_cut->form_kind( 'LE_SHP_DELNOTE' )
+                                        exp = zai_cl_print_preview=>gc_kind_smartform ).
+    cl_abap_unit_assert=>assert_initial( mo_cut->form_kind( 'ZAI_NOT_EXISTING' ) ).
+  ENDMETHOD.
+
+  METHOD override_adobe_ok.
+    " FP_TEST_00 is the standard test form of transaction SFP; the program is only checked, not run
+    IF mo_cut->form_kind( 'FP_TEST_00' ) <> zai_cl_print_preview=>gc_kind_adobe.
+      cl_abap_unit_assert=>fail( msg   = 'Standard Adobe form FP_TEST_00 not found in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
+    ENDIF.
+    DATA(ls_tnapr) = mo_cut->override_config( is_nast    = VALUE #( kappl = 'V1' kschl = 'BA00' )
+                                              iv_form    = 'FP_TEST_00'
+                                              iv_program = 'RLE_DELNOTE'
+                                              iv_routine = 'ENTRY' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_tnapr-sform
+                                        exp = 'FP_TEST_00' ).
+    cl_abap_unit_assert=>assert_equals( act = ls_tnapr-formtype
+                                        exp = zai_cl_print_preview=>gc_formtype_pdf ).
   ENDMETHOD.
 ENDCLASS.
