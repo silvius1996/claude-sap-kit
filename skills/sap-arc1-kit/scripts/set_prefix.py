@@ -6,8 +6,8 @@ Usage:
 
 The current prefix of the assets is read from assets/PREFIX. Both file names and content
 are replaced, keeping upper/lower case (ZAI_... / zai_...). The new prefix must start
-with Z or Y and have at most 10 characters: the longest names of the kit
-(e.g. <PREFIX>_PRINT_CALL_ROUTINE) must stay within the 30 characters allowed by SAP.
+with Z or Y and have at most 8 characters: the longest names of the kit
+(<PREFIX>_ADOBE_INTERFACE_WRITE) must stay within the 30 characters allowed by SAP.
 """
 import argparse
 import re
@@ -39,8 +39,8 @@ def main() -> int:
     args = parser.parse_args()
 
     new = args.to.upper().rstrip("_")
-    if not re.fullmatch(r"[ZY][A-Z0-9]{0,9}", new):
-        print(f"Invalid prefix: {args.to} (starts with Z/Y, letters/digits, max 10 characters)")
+    if not re.fullmatch(r"[ZY][A-Z0-9]{0,7}", new):
+        print(f"Invalid prefix: {args.to} (starts with Z/Y, letters/digits, max 8 characters)")
         return 1
     old = (ASSETS / "PREFIX").read_text(encoding="utf-8").strip()
     convert = replacer(old, new)

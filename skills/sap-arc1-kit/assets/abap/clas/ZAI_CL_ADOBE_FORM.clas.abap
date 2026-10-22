@@ -4,7 +4,8 @@
 "! (LOAD in WRITE mode, SET_LAYOUT_DATA, SAVE) but cannot replace its context, so an existing ZAI_* copy
 "! is deleted and created again; customer and standard forms are never written or deleted.
 "! Form interfaces ZAI_* are created, or updated in place with the setters of the loaded interface: the forms
-"! that use them stay linked.
+"! that use them stay linked. A customer form Z*/Y* gets the layout of an approved ZAI_* copy through
+"! prepare_replace/replace, in place and under a transport request, only when the rest of the form is unchanged.
 CLASS zai_cl_adobe_form DEFINITION
   PUBLIC
   FINAL
@@ -21,6 +22,19 @@ CLASS zai_cl_adobe_form DEFINITION
              created     TYPE abap_bool,
              ads_version TYPE string,
            END OF ty_write_result.
+
+    TYPES: BEGIN OF ty_replace_info,
+             devclass    TYPE devclass,
+             author      TYPE responsibl,
+             lastuser    TYPE syuname,
+             language    TYPE sylangu,
+             tr_owner    TYPE as4user,
+             token       TYPE string,
+             "! Original form XML and layout, for the backup
+             form        TYPE xstring,
+             layout      TYPE xstring,
+             copy_layout TYPE xstring,
+           END OF ty_replace_info.
 
     "! Name pattern of writable forms
     CONSTANTS gc_writable_pattern TYPE string VALUE `ZAI_*`.
@@ -54,6 +68,26 @@ CLASS zai_cl_adobe_form DEFINITION
     "! Version of Adobe Document Services; exception if ADS is not configured
     METHODS ads_version
       RETURNING VALUE(rv_version) TYPE string
+      RAISING   zai_cx_adobe_form.
+
+    "! Checks and data to give a customer form the layout of a ZAI_* copy; no writes
+    METHODS prepare_replace
+      IMPORTING iv_original     TYPE fpname
+                iv_copy         TYPE fpname
+                iv_transport    TYPE trkorr
+                iv_check_author TYPE abap_bool DEFAULT abap_true
+      RETURNING VALUE(rs_info)  TYPE ty_replace_info
+      RAISING   zai_cx_adobe_form.
+
+    "! Writes the layout of the copy into the original, in place, and records the original in the request;
+    "! the token must come from prepare_replace
+    METHODS replace
+      IMPORTING iv_original       TYPE fpname
+                iv_copy           TYPE fpname
+                iv_transport      TYPE trkorr
+                iv_token          TYPE string
+                iv_check_author   TYPE abap_bool DEFAULT abap_true
+      RETURNING VALUE(rv_fm_name) TYPE rs38l_fnam
       RAISING   zai_cx_adobe_form.
 
   PROTECTED SECTION.
@@ -109,10 +143,54 @@ CLASS zai_cl_adobe_form DEFINITION
                 iv_pretty     TYPE abap_bool
       RETURNING VALUE(rv_xml) TYPE xstring.
 
-    "! One element per line, so that the file stays editable line by line; unchanged if it is not XML
+    "! One element per line, so that the file stays editable line by line, with object ids renumbered and
+    "! CACHE_INFO empty, so that the same form always gives the same XML; unchanged if it is not XML
     METHODS pretty_print
       IMPORTING iv_xml        TYPE xstring
       RETURNING VALUE(rv_xml) TYPE xstring.
+
+    "! As abapGit (fix_oref): object ids o1, o2... renumbered in document order, with their references #o1, #o2...
+    METHODS normalize_ids
+      IMPORTING ii_document TYPE REF TO if_ixml_document.
+
+    "! As abapGit: CACHE_INFO depends on the layout (timeStamp, uuid) and SAP computes it again when saving
+    METHODS clear_cache_info
+      IMPORTING ii_document TYPE REF TO if_ixml_document.
+
+    METHODS check_replace
+      IMPORTING iv_original     TYPE fpname
+                iv_copy         TYPE fpname
+                iv_transport    TYPE trkorr
+                iv_check_author TYPE abap_bool
+      RETURNING VALUE(rs_info)  TYPE ty_replace_info
+      RAISING   zai_cx_adobe_form.
+
+    "! Owner of a modifiable workbench request; a task is refused with the name of its request
+    METHODS check_transport
+      IMPORTING iv_transport    TYPE trkorr
+      RETURNING VALUE(rv_owner) TYPE as4user
+      RAISING   zai_cx_adobe_form.
+
+    "! SHA1 of form XML and layout: any change to the form changes it
+    METHODS fingerprint
+      IMPORTING is_form        TYPE ty_form
+      RETURNING VALUE(rv_hash) TYPE string
+      RAISING   zai_cx_adobe_form.
+
+    METHODS corr_insert
+      IMPORTING iv_name      TYPE fpname
+                iv_devclass  TYPE devclass
+                iv_language  TYPE sylangu
+                iv_transport TYPE trkorr
+      RAISING   zai_cx_adobe_form.
+
+    "! Layout written in place into the loaded form (WRITE mode): context and interface stay as they are
+    METHODS replace_layout
+      IMPORTING iv_name      TYPE fpname
+                iv_layout    TYPE xstring
+                iv_language  TYPE sylangu
+                iv_transport TYPE trkorr
+      RAISING   zai_cx_adobe_form.
 
     METHODS check_layout
       IMPORTING iv_layout TYPE xstring
@@ -536,10 +614,308 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
 
   METHOD pretty_print.
     TRY.
-        rv_xml = render( ii_document = parse( iv_xml )
-                         iv_pretty   = abap_true ).
+        DATA(li_document) = parse( iv_xml ).
       CATCH zai_cx_adobe_form.
         rv_xml = iv_xml.
+        RETURN.
+    ENDTRY.
+    normalize_ids( li_document ).
+    clear_cache_info( li_document ).
+    rv_xml = render( ii_document = li_document
+                     iv_pretty   = abap_true ).
+  ENDMETHOD.
+
+  METHOD normalize_ids.
+    " The ids change at every conversion to XML; the references are collected first, by their old value
+    TYPES: BEGIN OF ty_href,
+             value     TYPE string,
+             attribute TYPE REF TO if_ixml_attribute,
+           END OF ty_href.
+    DATA lt_hrefs   TYPE SORTED TABLE OF ty_href WITH NON-UNIQUE KEY value.
+    DATA li_element TYPE REF TO if_ixml_element.
+    DATA lv_count   TYPE i.
+
+    DATA(li_iterator) = ii_document->create_iterator_filtered(
+      ii_document->create_filter_and( filter1 = ii_document->create_filter_node_type( if_ixml_node=>co_node_element )
+                                      filter2 = ii_document->create_filter_attribute( 'href' ) ) ).
+    li_element ?= li_iterator->get_next( ).
+    WHILE li_element IS BOUND.
+      DATA(li_href) = li_element->get_attribute_node( 'href' ).
+      IF li_href->get_value( ) CP '##o*'.
+        INSERT VALUE #( value     = li_href->get_value( )
+                        attribute = li_href ) INTO TABLE lt_hrefs.
+      ENDIF.
+      li_element ?= li_iterator->get_next( ).
+    ENDWHILE.
+
+    li_iterator = ii_document->create_iterator_filtered(
+      ii_document->create_filter_and( filter1 = ii_document->create_filter_node_type( if_ixml_node=>co_node_element )
+                                      filter2 = ii_document->create_filter_attribute( 'id' ) ) ).
+    li_element ?= li_iterator->get_next( ).
+    WHILE li_element IS BOUND.
+      DATA(lv_old) = li_element->get_attribute( 'id' ).
+      IF lv_old CP 'o*'.
+        lv_count = lv_count + 1.
+        DATA(lv_new) = |o{ lv_count }|.
+        li_element->set_attribute( name  = 'id'
+                                   value = lv_new ).
+        LOOP AT lt_hrefs INTO DATA(ls_href) WHERE value = |#{ lv_old }|.
+          ls_href-attribute->set_value( |#{ lv_new }| ).
+        ENDLOOP.
+      ENDIF.
+      li_element ?= li_iterator->get_next( ).
+    ENDWHILE.
+  ENDMETHOD.
+
+  METHOD clear_cache_info.
+    DATA lt_nodes TYPE STANDARD TABLE OF REF TO if_ixml_node WITH EMPTY KEY.
+
+    DATA(li_collection) = ii_document->get_elements_by_tag_name_ns( 'CACHE_INFO' ).
+    IF li_collection IS NOT BOUND.
+      RETURN.
+    ENDIF.
+    DATA(li_iterator) = li_collection->create_iterator( ).
+    DATA(li_node)     = li_iterator->get_next( ).
+    WHILE li_node IS BOUND.
+      APPEND li_node TO lt_nodes.
+      li_node = li_iterator->get_next( ).
+    ENDWHILE.
+    LOOP AT lt_nodes INTO li_node.
+      li_node->get_parent( )->replace_child( new_child = ii_document->create_element_ns( 'CACHE_INFO' )
+                                             old_child = li_node ).
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD prepare_replace.
+    rs_info = check_replace( iv_original     = iv_original
+                             iv_copy         = iv_copy
+                             iv_transport    = iv_transport
+                             iv_check_author = iv_check_author ).
+  ENDMETHOD.
+
+  METHOD replace.
+    DATA(ls_info) = check_replace( iv_original     = iv_original
+                                   iv_copy         = iv_copy
+                                   iv_transport    = iv_transport
+                                   iv_check_author = iv_check_author ).
+    IF ls_info-token <> iv_token.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |{ iv_original } or { iv_copy } changed after prepare (original last changed by | &&
+                    |{ ls_info-lastuser }): run prepare again|.
+    ENDIF.
+    " As for a copy: without ADS a form is not saved
+    ads_version( ).
+
+    corr_insert( iv_name      = iv_original
+                 iv_devclass  = ls_info-devclass
+                 iv_language  = ls_info-language
+                 iv_transport = iv_transport ).
+    TRY.
+        replace_layout( iv_name      = iv_original
+                        iv_layout    = renew_timestamp( ls_info-copy_layout )
+                        iv_language  = ls_info-language
+                        iv_transport = iv_transport ).
+        activate( iv_original ).
+        rv_fm_name = function_module( iv_original ).
+      CATCH zai_cx_adobe_form INTO DATA(lx_error).
+        " The entry in the request stays: say so, otherwise the unchanged version would be released
+        RAISE EXCEPTION TYPE zai_cx_adobe_form
+          EXPORTING
+            iv_text  = |{ lx_error->get_text( ) } (warning: { iv_original } is already recorded in transport request { iv_transport })|
+            previous = lx_error.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD check_replace.
+    " First the checks on names and request, which need no existing forms
+    IF iv_original NP 'Z*' AND iv_original NP 'Y*'.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Replacement allowed only for Adobe forms Z* or Y*: { iv_original } refused|.
+    ENDIF.
+    IF iv_original CP gc_writable_pattern.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |{ iv_original } is a { gc_writable_pattern } copy: specify the original form|.
+    ENDIF.
+    IF iv_copy NP gc_writable_pattern.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |The copy must be an Adobe form { gc_writable_pattern }: { iv_copy } refused|.
+    ENDIF.
+    rs_info-tr_owner = check_transport( iv_transport ).
+
+    SELECT SINGLE devclass, author, masterlang FROM tadir
+      WHERE pgmid    = 'R3TR'
+        AND object   = @gc_object_form
+        AND obj_name = @iv_original
+      INTO @DATA(ls_tadir).
+    IF sy-subrc <> 0 OR ls_tadir-devclass IS INITIAL OR ls_tadir-devclass = '$TMP'.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Adobe form { iv_original } is not in the object directory or is local ($TMP): cannot be replaced|.
+    ENDIF.
+    " With the logged-on user, not the one declared in the client configuration
+    IF iv_check_author = abap_true AND ls_tadir-author <> sy-uname.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Adobe form { iv_original } belongs to another user: author { ls_tadir-author }, logged-on user { sy-uname }|.
+    ENDIF.
+
+    " An inactive version means that someone is changing the form in SFP
+    SELECT SINGLE @abap_true FROM fplayout
+      WHERE name  = @iv_original
+        AND state = 'I'
+      INTO @DATA(lv_inactive).
+    IF lv_inactive = abap_true.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Adobe form { iv_original } has an inactive version: activate it or discard it in SFP first|.
+    ENDIF.
+    SELECT SINGLE lastuser FROM fplayout
+      WHERE name  = @iv_original
+        AND state = 'A'
+      INTO @DATA(lv_lastuser).
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form EXPORTING iv_text = |Adobe form { iv_original } not found or not active|.
+    ENDIF.
+
+    " The copy must be one of the kit: local and of the logged-on user
+    SELECT SINGLE devclass, author FROM tadir
+      WHERE pgmid    = 'R3TR'
+        AND object   = @gc_object_form
+        AND obj_name = @iv_copy
+      INTO @DATA(ls_copy).
+    IF sy-subrc <> 0 OR ls_copy-devclass <> '$TMP' OR ls_copy-author <> sy-uname.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Copy { iv_copy } not found, or not in $TMP of the logged-on user|.
+    ENDIF.
+
+    DATA(ls_original_form) = read( iv_original ).
+    DATA(ls_copy_form)     = read( iv_copy ).
+    check_layout( ls_copy_form-layout ).
+
+    " The token is a snapshot of original (package and author included) and copy: if they change
+    " before execute, the replacement is refused
+    rs_info-devclass    = ls_tadir-devclass.
+    rs_info-author      = ls_tadir-author.
+    rs_info-lastuser    = lv_lastuser.
+    rs_info-language    = ls_tadir-masterlang.
+    rs_info-form        = ls_original_form-form.
+    rs_info-layout      = ls_original_form-layout.
+    rs_info-copy_layout = ls_copy_form-layout.
+    rs_info-token       = cl_http_utility=>encode_base64( |{ ls_tadir-devclass }\|{ ls_tadir-author }\|{ lv_lastuser }\|| &&
+                                                          |{ fingerprint( ls_original_form ) }\|{ fingerprint( ls_copy_form ) }| ).
+  ENDMETHOD.
+
+  METHOD check_transport.
+    SELECT SINGLE trfunction, trstatus, strkorr, as4user FROM e070
+      WHERE trkorr = @iv_transport
+      INTO @DATA(ls_request).
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Transport request { iv_transport } does not exist|.
+    ENDIF.
+    IF ls_request-strkorr IS NOT INITIAL.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |{ iv_transport } is a task of request { ls_request-strkorr }: give the request|.
+    ENDIF.
+    IF ls_request-trfunction <> 'K' OR ( ls_request-trstatus <> 'D' AND ls_request-trstatus <> 'L' ).
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |Transport request { iv_transport } is already released or is not a workbench request|.
+    ENDIF.
+    rv_owner = ls_request-as4user.
+  ENDMETHOD.
+
+  METHOD fingerprint.
+    DATA lv_form   TYPE string.
+    DATA lv_layout TYPE string.
+    TRY.
+        cl_abap_message_digest=>calculate_hash_for_raw( EXPORTING if_algorithm  = 'SHA1'
+                                                                  if_data       = is_form-form
+                                                        IMPORTING ef_hashstring = lv_form ).
+        cl_abap_message_digest=>calculate_hash_for_raw( EXPORTING if_algorithm  = 'SHA1'
+                                                                  if_data       = is_form-layout
+                                                        IMPORTING ef_hashstring = lv_layout ).
+      CATCH cx_abap_message_digest INTO DATA(lx_error).
+        RAISE EXCEPTION TYPE zai_cx_adobe_form
+          EXPORTING
+            iv_text  = |Fingerprint of the form not computed: { lx_error->get_text( ) }|
+            previous = lx_error.
+    ENDTRY.
+    rv_hash = |{ lv_form }{ lv_layout }|.
+  ENDMETHOD.
+
+  METHOD corr_insert.
+    " Records the object in the given request without popup, before the form is opened for writing
+    CALL FUNCTION 'RS_CORR_INSERT'
+      EXPORTING
+        object                   = iv_name
+        object_class             = gc_object_form
+        global_lock              = abap_true
+        devclass                 = iv_devclass
+        korrnum                  = iv_transport
+        use_korrnum_immediatedly = abap_true
+        master_language          = iv_language
+        suppress_dialog          = abap_true
+      EXCEPTIONS
+        cancelled                = 1
+        permission_failure       = 2
+        unknown_objectclass      = 3
+        OTHERS                   = 4.
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE zai_cx_adobe_form
+        EXPORTING
+          iv_text = |{ iv_name } not recorded in transport request { iv_transport }: { sy-msgid } { sy-msgno } { sy-msgv1 } { sy-msgv2 }|.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD replace_layout.
+    DATA li_wb_form TYPE REF TO if_fp_wb_form.
+    DATA li_form    TYPE REF TO if_fp_form.
+    " In the original language, without language check: in a form of another language the lock asks in a
+    " popup whether to change the original language, and via RFC that is a dump (DYNPRO_SEND_IN_BACKGROUND).
+    " The form is already in the request (corr_insert): I_DARK also skips the correction dialog
+    TRY.
+        TRY.
+            CALL METHOD cl_fp_wb_form=>('LOAD')
+              EXPORTING
+                i_name                    = iv_name
+                i_mode                    = if_fp_wb_object=>c_mode_write
+                i_language                = iv_language
+                i_ordernum                = iv_transport
+                i_suppress_language_check = abap_true
+                i_dark                    = abap_true
+              RECEIVING
+                r_wb_form                 = li_wb_form.
+          CATCH cx_sy_dyn_call_error.
+            li_wb_form = cl_fp_wb_form=>load( i_name                    = iv_name
+                                              i_mode                    = if_fp_wb_object=>c_mode_write
+                                              i_language                = iv_language
+                                              i_ordernum                = iv_transport
+                                              i_suppress_language_check = abap_true ).
+        ENDTRY.
+        li_form ?= li_wb_form->get_object( ).
+        li_form->get_layout( )->set_layout_data( iv_layout ).
+        li_wb_form->save( ).
+        li_wb_form->free( ).
+      CATCH cx_fp_api INTO DATA(lx_error).
+        " Releases the lock, if the form was opened
+        IF li_wb_form IS BOUND.
+          TRY.
+              li_wb_form->free( ).
+            CATCH cx_fp_api ##NO_HANDLER.
+          ENDTRY.
+        ENDIF.
+        RAISE EXCEPTION TYPE zai_cx_adobe_form
+          EXPORTING
+            iv_text  = |Adobe form { iv_name }: layout not replaced: { lx_error->get_text( ) }|
+            previous = lx_error.
     ENDTRY.
   ENDMETHOD.
 

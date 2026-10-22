@@ -26,6 +26,11 @@ export function readRules(env: NodeJS.ProcessEnv = process.env): ProjectRules {
   };
 }
 
+// A check switched off is sent as '-': SOAP-RFC drops empty parameters, and the FM default 'X' would turn it on again
+export function checkAuthorFlag(rules: ProjectRules): 'X' | '-' {
+  return rules.checkAuthor ? 'X' : '-';
+}
+
 export function matchesPackage(devclass: string, patterns: string[]): boolean {
   const name = devclass.trim().toUpperCase();
   return patterns.some((pattern) => {

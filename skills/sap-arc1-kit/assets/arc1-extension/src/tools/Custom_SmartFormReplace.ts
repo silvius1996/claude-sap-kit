@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { z } from 'zod';
 import { defineTool, OperationType, type ToolContext } from 'arc-1/public';
 import { savePdf as saveFile } from '../pdf-file.js';
-import { checkReplaceRules, readRules } from '../project-rules.js';
+import { checkAuthorFlag, checkReplaceRules, readRules } from '../project-rules.js';
 import { backupFileName } from '../smartform-file.js';
 import { formatPrepareSummary, readPrepareResponse, type PrepareResult } from '../smartform-replace.js';
 import { buildEnvelope, readElement, readFault } from '../soap-rfc.js';
@@ -64,7 +64,7 @@ export default defineTool({
     }
 
     // The author check is done in ABAP with the logged-on user; .mcp.json only says whether to do it
-    const base = { IV_ORIGINAL: original, IV_COPY: copy, IV_TRANSPORT: transport, IV_CHECK_AUTHOR: rules.checkAuthor ? 'X' : '' };
+    const base = { IV_ORIGINAL: original, IV_COPY: copy, IV_TRANSPORT: transport, IV_CHECK_AUTHOR: checkAuthorFlag(rules) };
     try {
       // execute reads the state again too: package and author may have changed after prepare
       const prepared: PrepareResult = readPrepareResponse(await callReplace(ctx, { ...base, IV_MODE: 'P' }));

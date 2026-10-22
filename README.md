@@ -25,7 +25,7 @@ ADT does not cover: running reports, previewing print output and editing SmartFo
 ## How it works
 
 ```
-Claude Code ──MCP──▶ ARC-1 ──▶ extension (8 Custom_* tools) ──HTTP /sap/bc/soap/rfc──▶ remote-enabled FMs ZAI_* ──▶ ABAP classes
+Claude Code ──MCP──▶ ARC-1 ──▶ extension (9 Custom_* tools) ──HTTP /sap/bc/soap/rfc──▶ remote-enabled FMs ZAI_* ──▶ ABAP classes
 ```
 
 | Tool | What it does |
@@ -38,6 +38,7 @@ Claude Code ──MCP──▶ ARC-1 ──▶ extension (8 Custom_* tools) ─�
 | `Custom_AdobeFormRead` | Downloads any Adobe form (SFP) as three files: form XML without layout, layout XDP, interface XML |
 | `Custom_AdobeFormWrite` | Uploads form XML + XDP as a `ZAI_*` copy in `$TMP`, with activation and FM generation |
 | `Custom_AdobeInterfaceWrite` | Uploads an interface XML as a `ZAI_*` form interface in `$TMP` (new, or updated in place so the forms using it stay linked), with activation |
+| `Custom_AdobeFormReplace` | Gives a customer Adobe form the layout of the approved copy, in place, under a transport request, in two steps (`prepare` → `execute`); refused if the copy differs in anything else |
 
 ARC-1 extensions can only make HTTP calls, so the tools call remote-enabled function modules
 through the standard SOAP-RFC service.
@@ -99,7 +100,8 @@ The kit is designed to be safe even when an AI is driving it:
 - SmartForms and Adobe forms are written only as copies with the kit prefix, in `$TMP`, created by the
   logged-on user; every overwrite first saves a local backup;
 - replacing a customer form needs a transport request given by the user, a `prepare` step with a summary
-  and a one-time token, and is refused if the original or the copy changed in the meantime;
+  and a one-time token, and is refused if the original or the copy changed in the meantime; for Adobe forms
+  only the layout is replaced, in place, and only when the copy differs from the original in nothing else;
 - allowed packages, allowed requests and the author check are configured in the project `.mcp.json`;
 - nothing is ever deleted, with one exception: the SAP API cannot replace the context of an Adobe form,
   so an existing `ZAI_*` copy (own, in `$TMP`) is deleted and created again after its backup;
@@ -112,7 +114,7 @@ agreement with them. The tools are not equal from this point of view:
 
 | Tool | What reaches the model |
 |---|---|
-| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite`, `Custom_AdobeInterfaceWrite` | Form definitions: layout, texts and code. Customer code, but no business documents |
+| `Custom_SmartFormRead`, `Custom_SmartFormWrite`, `Custom_SmartFormReplace`, `Custom_AdobeFormRead`, `Custom_AdobeFormWrite`, `Custom_AdobeInterfaceWrite`, `Custom_AdobeFormReplace` | Form definitions: layout, texts and code. Customer code, but no business documents |
 | `Custom_LaunchReport` | **Business data**: the report output (ALV rows or list), for example stock, prices, customers |
 | `Custom_PrintPreview` | **Business data**: the printed document, with addresses, prices and quantities. The PDF is saved locally and reaches the model when Claude reads or compares it, as the skills do to check a form |
 
@@ -136,9 +138,9 @@ real data out. Decide per system and per customer:
 ## Limits
 
 - Print output with NAST messages only: no S/4 Output Management (BRF+/APOC).
-- Editing: SmartForms (copies and replacement of the original) and Adobe forms (copies only: replacing
-  the original is not available yet). SAPscript can be previewed but not edited.
-- Adobe forms: the interface is read only.
+- Editing: SmartForms (copies and replacement of the original) and Adobe forms (copies, `ZAI_*` interfaces
+  and replacement of the layout of the original in its original language; context, interface and
+  translations of a customer form are changed in SFP / SE63). SAPscript can be previewed but not edited.
 - Reports that open popups, `CALL SCREEN` or dialog transactions cannot be run.
 
 ## Tests
