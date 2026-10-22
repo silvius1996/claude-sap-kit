@@ -19,6 +19,11 @@ CLASS zai_cl_print_preview DEFINITION
     CONSTANTS gc_kind_adobe     TYPE char1 VALUE 'A'.
     "! TNAPR-FORMTYPE of an Adobe form
     CONSTANTS gc_formtype_pdf   TYPE tnapr-formtype VALUE '2'.
+    "! TVARVC variable whose LOW values are the print programs allowed besides those configured in TNAPR
+    CONSTANTS gc_allowed_programs TYPE rvari_vnam VALUE 'ZAI_PREVIEW_PROGRAMS'.
+
+    "! Title of the spool requests of the last run, unique per run
+    DATA mv_title TYPE nast-tdcovtitle READ-ONLY.
 
     METHODS run
       IMPORTING iv_document      TYPE nast-objky
@@ -60,6 +65,12 @@ CLASS zai_cl_print_preview DEFINITION
       IMPORTING iv_form        TYPE tdsfname
       RETURNING VALUE(rv_kind) TYPE char1.
 
+    "! Deletes the spool requests of the last run that are still there (after the rollback of the caller
+    "! only the Adobe ones); with iv_keep they stay. Returns the spool requests left in SP01
+    METHODS clean_up_spools
+      IMPORTING iv_keep             TYPE abap_bool DEFAULT abap_false
+      RETURNING VALUE(rt_spool_ids) TYPE tt_spool_ids.
+
   PROTECTED SECTION.
   PRIVATE SECTION.
     TYPES: BEGIN OF ty_spool,
@@ -77,6 +88,18 @@ CLASS zai_cl_print_preview DEFINITION
     METHODS find_spools
       IMPORTING iv_title         TYPE nast-tdcovtitle
       RETURNING VALUE(rt_spools) TYPE tt_spools.
+
+    "! Title of the spool requests, unique per run
+    METHODS new_title
+      IMPORTING iv_output_type  TYPE nast-kschl
+      RETURNING VALUE(rv_title) TYPE nast-tdcovtitle.
+
+    "! Program and routine other than the configured ones only if configured for another output type
+    "! (TNAPR), listed in TVARVC gc_allowed_programs or a local program ($TMP) of the logged-on user
+    METHODS check_program
+      IMPORTING iv_program TYPE progname
+                iv_routine TYPE tnapr-ronam
+      RAISING   zai_cx_print_preview.
 
     METHODS convert_to_pdf
       IMPORTING is_spool      TYPE ty_spool
@@ -99,7 +122,8 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
                                                        iv_program = iv_program
                                                        iv_routine = iv_routine ) ).
 
-    DATA(lv_title) = CONV nast-tdcovtitle( |{ gc_title_prefix } { sy-datum }{ sy-uzeit } { ls_nast-kschl }| ).
+    mv_title = new_title( ls_nast-kschl ).
+    DATA(lv_title) = mv_title.
     " Separate variable: on 7.50 CALL FUNCTION reads the IS_NAST of the nested method call
     " as a second formal parameter IS_NAST and the class does not compile
     DATA(ls_print_nast) = prepare_nast( is_nast   = ls_nast
@@ -204,6 +228,8 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
         EXPORTING
           iv_text = |Print program { iv_program } does not exist or is not active|.
     ENDIF.
+    check_program( iv_program = lv_program
+                   iv_routine = iv_routine ).
 
     DATA lv_fm_name TYPE rs38l_fnam.
     DATA lx_adobe   TYPE REF TO cx_root.
@@ -276,6 +302,66 @@ CLASS zai_cl_print_preview IMPLEMENTATION.
           AND state = 'A'
         INTO @rv_kind.
     ENDIF.
+  ENDMETHOD.
+
+  METHOD new_title.
+    " Two previews in the same second took the same spool request when the title was made of date and time
+    TRY.
+        DATA(lv_uuid) = CONV string( cl_system_uuid=>create_uuid_c22_static( ) ).
+      CATCH cx_uuid_error.
+        DATA lv_now TYPE timestampl.
+        GET TIME STAMP FIELD lv_now.
+        lv_uuid = |{ lv_now }|.
+    ENDTRY.
+    rv_title = |{ gc_title_prefix } { iv_output_type } { lv_uuid }|.
+  ENDMETHOD.
+
+  METHOD check_program.
+    " Not any routine of any program: the preview runs it as a real print
+    SELECT SINGLE @abap_true FROM tnapr
+      WHERE pgnam = @iv_program
+        AND ronam = @iv_routine
+      INTO @DATA(lv_allowed).                           "#EC CI_NOFIELD
+    IF sy-subrc <> 0.
+      SELECT SINGLE @abap_true FROM tvarvc
+        WHERE name = @gc_allowed_programs
+          AND low  = @iv_program
+        INTO @lv_allowed.                               "#EC CI_NOFIELD
+    ENDIF.
+    IF sy-subrc <> 0.
+      SELECT SINGLE @abap_true FROM tadir
+        WHERE pgmid    = 'R3TR'
+          AND object   = 'PROG'
+          AND obj_name = @iv_program
+          AND devclass = '$TMP'
+          AND author   = @sy-uname
+        INTO @lv_allowed.
+    ENDIF.
+    IF sy-subrc <> 0.
+      RAISE EXCEPTION TYPE zai_cx_print_preview
+        EXPORTING
+          iv_text = |Print program { iv_program } with routine { iv_routine } not allowed: neither configured in TNAPR, | &&
+                    |nor listed in TVARVC { gc_allowed_programs }, nor a local program of { sy-uname }|.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD clean_up_spools.
+    DATA lv_status TYPE sysubrc.
+    LOOP AT find_spools( mv_title ) INTO DATA(ls_spool).
+      IF iv_keep = abap_true.
+        APPEND ls_spool-rqident TO rt_spool_ids.
+        CONTINUE.
+      ENDIF.
+      CALL FUNCTION 'RSPO_R_RDELETE_SPOOLREQ'
+        EXPORTING
+          spoolid      = CONV tsp01_sp0r-rqid_char( ls_spool-rqident )
+          allow_commit = abap_true
+        IMPORTING
+          status       = lv_status.
+      IF lv_status <> 0.
+        APPEND ls_spool-rqident TO rt_spool_ids.
+      ENDIF.
+    ENDLOOP.
   ENDMETHOD.
 
   METHOD prepare_nast.

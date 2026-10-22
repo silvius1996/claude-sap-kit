@@ -13,7 +13,7 @@ installation, `ZAI` by default):
 | `Custom_AdobeFormRead(name, interface?)` | Saves `output/adobe-forms/<NAME>.form.xml` (form without layout: properties and context), `<NAME>.xdp` (layout) and `<INTERFACE>.interface.xml` (form interface) |
 | `Custom_AdobeFormWrite(name, form, layout)` | Uploads form XML + XDP as a `<PREFIX>_*` form in `$TMP`: save, activation, function module. If the copy exists, it first saves a backup in `output/adobe-forms/backup/` |
 | `Custom_AdobeInterfaceWrite(name, interface)` | Uploads an interface XML as a `<PREFIX>_*` form interface in `$TMP` and activates it. An existing one is **updated in place** (the forms using it stay linked), after a backup in `output/adobe-forms/backup/` |
-| `Custom_PrintPreview(document, outputType, application?, form?, program?, routine?)` | Runs the print program of the NAST message to spool (without printing) and saves the PDF; with `form` it uses a SmartForms or Adobe form not configured yet |
+| `Custom_PrintPreview(document, outputType, application?, form?, program?, routine?)` | Runs the print program of the NAST message to spool (without printing), saves the PDF, then rolls back what the print program wrote and deletes the spool; with `form` it uses a SmartForms or Adobe form not configured yet |
 | `Custom_AdobeFormReplace(action, original, copy, transport, token?)` | Gives the customer form `Z*`/`Y*` the **layout** of the approved `<PREFIX>_*` copy, in place, under the given request. `prepare`: checks (only the layout may differ), XML/XDP backup of the original, summary, token; no writes. `execute`: with the token; refused if the original or the copy changed after `prepare` |
 
 They are ARC-1 tools, named here by their short name: in Claude Code they are
@@ -51,7 +51,9 @@ Adobe form change:
 1. **Find form and print program** of the document, from `TNAPR` (output type, medium 1):
    `SAPQuery: SELECT kappl, kschl, pgnam, ronam, sform, formtype FROM tnapr WHERE kschl = '<TYPE>' AND nacha = '1'`.
    The form is an Adobe form if `SELECT name FROM fplayout WHERE name = '<FORM>' AND state = 'A'`
-   finds it. If the output type has no TNAPR entry, ask the user for program and routine.
+   finds it. If the output type has no TNAPR entry, ask the user for program and routine. Program and
+   routine must be configured in TNAPR for some output type, listed in the TVARVC variable
+   `ZAI_PREVIEW_PROGRAMS` or be a local program of the user; otherwise the preview is refused.
 2. **Reference preview** of the current form: `Custom_PrintPreview` on the document. Show the PDF
    to the user and use it to understand what to change.
 3. **Copy**: `Custom_AdobeFormRead` of the source form, then `Custom_AdobeFormWrite` with a
@@ -72,8 +74,8 @@ Adobe form change:
 5. **Change**: copy the files to new ones and change only what is needed (see below), then
    `Custom_AdobeFormWrite`, preview and compare with the reference: only what was meant to
    change should change. If something else changed, fix the files and repeat.
-6. **Hand-over**: tell the user where to see the result (PDF, spool in `SP01` with title
-   `Claude preview ...`, form in transaction `SFP` in display mode), how to roll back (upload the
+6. **Hand-over**: tell the user where to see the result (PDF; the spool request is deleted after the
+   preview unless `keepSpool` was passed; form in transaction `SFP` in display mode), how to roll back (upload the
    backup files again with `Custom_AdobeFormWrite`) and that the original form is unchanged: the
    user decides how to bring the change into it. A change of the layout only goes in with step 7;
    changes of context or interface are made by the user in `SFP`.

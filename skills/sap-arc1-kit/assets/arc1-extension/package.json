@@ -1,6 +1,6 @@
 {
   "name": "arc1-sap-tools",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "ARC-1 extension: run reports, NAST print preview as PDF, read/write and replace SmartForms as XML, read/write Adobe form copies as XML + XDP and replace the layout of a customer form (via SOAP-RFC).",
   "type": "module",
   "main": "dist/index.js",

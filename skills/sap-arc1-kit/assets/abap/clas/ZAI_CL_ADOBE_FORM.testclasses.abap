@@ -29,6 +29,7 @@ CLASS ltc_adobe_form DEFINITION FINAL
     METHODS interface_form_xml_refused FOR TESTING.
     METHODS normalize_ids              FOR TESTING RAISING cx_static_check.
     METHODS clear_cache_info           FOR TESTING RAISING cx_static_check.
+    METHODS sort_texts                 FOR TESTING RAISING cx_static_check.
     METHODS replace_standard_refused   FOR TESTING.
     METHODS replace_copy_as_original   FOR TESTING.
     METHODS replace_copy_not_zai       FOR TESTING.
@@ -263,6 +264,21 @@ CLASS ltc_adobe_form IMPLEMENTATION.
       act = cl_abap_codepage=>convert_from( mo_cut->render( ii_document = li_document
                                                             iv_pretty   = abap_false ) )
       exp = `*<a><CACHE_INFO/><b>1</b></a>*` ).
+  ENDMETHOD.
+
+  METHOD sort_texts.
+    " Texts of context and layout sorted by id and language, other elements untouched
+    DATA(li_document) = mo_cut->parse( cl_abap_codepage=>convert_to(
+      `<a><CONTEXTT><T><LANGUAGE>I</LANGUAGE><ID>B</ID></T><T><LANGUAGE>E</LANGUAGE><ID/></T>` &&
+      `<T><LANGUAGE>D</LANGUAGE><ID>B</ID></T><T><LANGUAGE>D</LANGUAGE><ID/></T></CONTEXTT>` &&
+      `<LAYOUTT><L><LANGUAGE>I</LANGUAGE></L><L><LANGUAGE>D</LANGUAGE></L></LAYOUTT><z>1</z><y>2</y></a>` ) ).
+    mo_cut->sort_texts( li_document ).
+    cl_abap_unit_assert=>assert_char_cp(
+      act = cl_abap_codepage=>convert_from( mo_cut->render( ii_document = li_document
+                                                            iv_pretty   = abap_false ) )
+      exp = `*<a><CONTEXTT><T><LANGUAGE>D</LANGUAGE><ID/></T><T><LANGUAGE>E</LANGUAGE><ID/></T>` &&
+            `<T><LANGUAGE>D</LANGUAGE><ID>B</ID></T><T><LANGUAGE>I</LANGUAGE><ID>B</ID></T></CONTEXTT>` &&
+            `<LAYOUTT><L><LANGUAGE>D</LANGUAGE></L><L><LANGUAGE>I</LANGUAGE></L></LAYOUTT><z>1</z><y>2</y></a>*` ).
   ENDMETHOD.
 
   METHOD assert_replace_refused.

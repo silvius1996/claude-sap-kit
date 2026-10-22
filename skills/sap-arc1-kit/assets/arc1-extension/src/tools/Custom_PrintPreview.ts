@@ -6,8 +6,8 @@ import { decodePdf, pdfFileName, savePdf } from '../pdf-file.js';
 import { buildEnvelope, readElement, readFault } from '../soap-rfc.js';
 
 // PDF preview of the print output of a NAST message (sales, deliveries, billing) through the FM
-// ZAI_RUN_PRINT_PREVIEW: the print program runs to spool (no immediate printing),
-// the spool stays in SP01 and is converted to PDF. The PDF is saved locally.
+// ZAI_RUN_PRINT_PREVIEW: the print program runs to spool (no immediate printing), the spool is converted
+// to PDF, then what the print program wrote is rolled back and the spool deleted. The PDF is saved locally.
 const FUNCTION_NAME = 'ZAI_RUN_PRINT_PREVIEW';
 const SOAP_RFC_PATH = '/sap/bc/soap/rfc';
 // dist/tools → project root
@@ -24,6 +24,7 @@ const schema = z.object({
   form: z.string().min(1).max(30).optional().describe('SmartForms or Adobe form to use instead of the configured one (requires program and routine).'),
   program: z.string().min(1).max(40).optional().describe('Print program to use with form, e.g. RLE_DELNOTE.'),
   routine: z.string().min(1).max(30).optional().describe('Print program routine to use with form, e.g. ENTRY.'),
+  keepSpool: z.boolean().optional().describe('Keep the Adobe spool request in SP01 (default: deleted; SmartForms/SAPscript spool requests go anyway with the rollback).'),
 });
 
 type Args = z.infer<typeof schema>;
@@ -33,8 +34,9 @@ export default defineTool({
   description:
     'Creates the PDF of the print output of an SD document (NAST message, print medium) by running the print program ' +
     'to spool and converting the spool to PDF; saves the file locally and returns its path. ' +
-    'The spool stays in SP01. Does not create or change NAST messages. Does not cover S/4 Output Management (APOC). ' +
-    'With form/program/routine it tries out a SmartForms or Adobe form that is not configured yet (TNAPR replaced in memory only).',
+    'Afterwards what the print program wrote is rolled back and the spool request deleted. Does not create or change NAST messages. Does not cover S/4 Output Management (APOC). ' +
+    'With form/program/routine it tries out a SmartForms or Adobe form that is not configured yet (TNAPR replaced in memory only); ' +
+    'the program/routine must be configured in TNAPR for some output type, listed in TVARVC ZAI_PREVIEW_PROGRAMS or a local program of the user.',
   schema,
   policy: { scope: 'write', opType: OperationType.Workflow },
   availableOn: 'onprem',
@@ -50,6 +52,7 @@ export default defineTool({
       IV_FORM: a.form?.trim().toUpperCase(),
       IV_PROGRAM: a.program?.trim().toUpperCase(),
       IV_ROUTINE: a.routine?.trim().toUpperCase(),
+      IV_KEEP_SPOOL: a.keepSpool ? 'X' : undefined,
     });
 
     const res = await ctx.http.post(SOAP_RFC_PATH, envelope, 'text/xml; charset=utf-8', {
@@ -78,12 +81,13 @@ export default defineTool({
     }
 
     const path = await savePdf(a.outputDir ?? DEFAULT_OUTPUT_DIR, pdfFileName(a.document, a.outputType), pdf);
+    const spools = readElement(res.body, 'EV_SPOOL_IDS').trim();
     const lines = [
       `PDF saved: ${path}`,
       `Size: ${pdf.length} bytes`,
       `Program: ${readElement(res.body, 'EV_PROGRAM').trim()} / ${readElement(res.body, 'EV_ROUTINE').trim()}`,
       `Form: ${readElement(res.body, 'EV_FORM').trim() || '-'}`,
-      `Spool requests (kept in SP01): ${readElement(res.body, 'EV_SPOOL_IDS').trim()} (${readElement(res.body, 'EV_SPOOL_TYPE').trim()})`,
+      `Spool (${readElement(res.body, 'EV_SPOOL_TYPE').trim()}): ${spools ? `left in SP01: ${spools}` : 'deleted'}`,
     ];
     return { content: [{ type: 'text', text: lines.join('\n') }] };
   },

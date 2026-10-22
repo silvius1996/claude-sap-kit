@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.7.1
+
+Fixes for Adobe forms with translations and for the print preview. Checked with abaplint (v750 syntax) and the
+Node tests only: **not tested live yet**.
+
+- Adobe forms and interfaces are now always opened in their original language, without language check, also when
+  only reading (`Custom_AdobeFormRead`, update of a `ZAI_*` interface). With a logon language other than the
+  original one SAP returned the translation of the logon language and first merged the pending translations
+  (`FP_REFRESH_LANGU_VERSION`): a read could write the layout table `FPLAYOUTT` or fail with a data transformation
+  error, and an interface opened for writing could show the language popup (a dump via RFC). The `LOAD` calls go
+  through one method that leaves out the optional parameters missing on older releases (`I_DARK`, then the
+  language parameters), instead of naming them statically. As a consequence `Custom_AdobeFormRead` now returns
+  the layout in the original language of the form, the one SFP edits and `Custom_AdobeFormReplace` writes, also
+  when the logon language is another one (before: the translation of the logon language).
+- `Custom_AdobeFormRead`: the texts of context and layout (`CONTEXTT`, `LAYOUTT`) are sorted by id and language.
+  SAP reads them in any order, so after a save the same form could give another XML and
+  `Custom_AdobeFormReplace` refused a copy without real differences.
+- `Custom_PrintPreview`:
+  - after the conversion to PDF what the print program wrote is rolled back (`ROLLBACK WORK`): the end of the RFC
+    call would otherwise commit it. SmartForms and SAPscript spool requests go with the rollback; Adobe spool
+    requests (`ADSP`) are written outside the transaction and are now deleted (`RSPO_R_RDELETE_SPOOLREQ`).
+    New optional parameter `keepSpool` keeps them in SP01;
+  - the spool title has a UUID instead of date and time: two previews in the same second took the same spool
+    request;
+  - a program/routine other than the configured ones (`form`/`program`/`routine`) is accepted only if the pair is
+    configured in TNAPR for some output type, if the program is listed in the TVARVC variable
+    `ZAI_PREVIEW_PROGRAMS` (with any routine) or if it is a local program (`$TMP`) of the logged-on user.
+    Before, any routine of any program was run.
+- Not changed, to keep in mind: the function module of an Adobe form is generated in the logon language, after the
+  pending translations are merged; if they cannot be merged, activation fails with the form already saved. Activate
+  with a logon in the original language of the form. After a short dump in the print program the preview cannot
+  clean up: its spool requests stay in SP01 with the title `Claude preview ...`.
+
 ## 0.7.0
 
 Replacement of a customer Adobe form with the approved copy, for layout changes. Tested live on S/4HANA

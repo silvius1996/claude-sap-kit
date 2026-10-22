@@ -21,6 +21,8 @@ CLASS ltc_print_preview DEFINITION FINAL
     METHODS override_ok            FOR TESTING RAISING cx_static_check.
     METHODS form_kind              FOR TESTING.
     METHODS override_adobe_ok      FOR TESTING RAISING cx_static_check.
+    METHODS program_not_allowed    FOR TESTING.
+    METHODS unique_title           FOR TESTING.
 ENDCLASS.
 
 
@@ -103,7 +105,8 @@ CLASS ltc_print_preview IMPLEMENTATION.
 
   METHOD spool_after_wraparound.
     " Spool number range wraps around: a preview spool request with a number below
-    " the TSP01 maximum must still be found by title
+    " the TSP01 maximum must still be found by title (previews delete their spool requests:
+    " only those of older versions or kept with keepSpool are there)
     SELECT MAX( rqident ) FROM tsp01 INTO @DATA(lv_max).  "#EC CI_NOWHERE
     SELECT rqident, rqtitle FROM tsp01
       WHERE rqowner = @sy-uname
@@ -186,5 +189,41 @@ CLASS ltc_print_preview IMPLEMENTATION.
                                         exp = 'FP_TEST_00' ).
     cl_abap_unit_assert=>assert_equals( act = ls_tnapr-formtype
                                         exp = zai_cl_print_preview=>gc_formtype_pdf ).
+  ENDMETHOD.
+
+  METHOD program_not_allowed.
+    " A program that is not a print program configured in TNAPR: refused before anything runs
+    SELECT SINGLE @abap_true FROM tnapr
+      WHERE pgnam = 'RSPARAM'
+      INTO @DATA(lv_configured).                        "#EC CI_NOFIELD
+    SELECT SINGLE @abap_true FROM tvarvc
+      WHERE name = @zai_cl_print_preview=>gc_allowed_programs
+        AND low  = 'RSPARAM'
+      INTO @DATA(lv_listed).                            "#EC CI_NOFIELD
+    IF lv_configured = abap_true OR lv_listed = abap_true.
+      cl_abap_unit_assert=>fail( msg   = 'RSPARAM is allowed as print program in this system'
+                                 level = if_aunit_constants=>tolerable
+                                 quit  = if_aunit_constants=>method ).
+    ENDIF.
+    TRY.
+        mo_cut->override_config( is_nast    = VALUE #( kappl = 'V2' kschl = 'LD00' )
+                                 iv_form    = 'LE_SHP_DELNOTE'
+                                 iv_program = 'RSPARAM'
+                                 iv_routine = 'ENTRY' ).
+        cl_abap_unit_assert=>fail( 'Exception expected for a program not allowed' ).
+      CATCH zai_cx_print_preview INTO DATA(lx_error).
+        cl_abap_unit_assert=>assert_char_cp( act = lx_error->get_text( )
+                                             exp = '*RSPARAM*not allowed*' ).
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD unique_title.
+    " Two previews in the same second took the same spool request when the title was made of date and time
+    DATA(lv_first)  = mo_cut->new_title( 'BA00' ).
+    DATA(lv_second) = mo_cut->new_title( 'BA00' ).
+    cl_abap_unit_assert=>assert_differs( act = lv_second
+                                         exp = lv_first ).
+    cl_abap_unit_assert=>assert_char_cp( act = lv_first
+                                         exp = |{ zai_cl_print_preview=>gc_title_prefix } BA00 *| ).
   ENDMETHOD.
 ENDCLASS.
