@@ -157,6 +157,37 @@ CLASS zai_cl_adobe_form DEFINITION
     METHODS clear_cache_info
       IMPORTING ii_document TYPE REF TO if_ixml_document.
 
+    "! Entries of CONTEXTT and LAYOUTT sorted by id and language: SAP reads the texts in any order
+    METHODS sort_texts
+      IMPORTING ii_document TYPE REF TO if_ixml_document.
+
+    "! Original language of the object (TADIR); empty if unknown
+    METHODS original_language
+      IMPORTING iv_name            TYPE fpname
+                iv_object          TYPE trobjtype DEFAULT gc_object_form
+      RETURNING VALUE(rv_language) TYPE sylangu.
+
+    "! Form loaded in its original language, without language check and without dialogs
+    METHODS load_form
+      IMPORTING iv_name           TYPE fpname
+                iv_mode           TYPE string DEFAULT if_fp_wb_object=>c_mode_read
+                iv_transport      TYPE trkorr OPTIONAL
+      RETURNING VALUE(ri_wb_form) TYPE REF TO if_fp_wb_form
+      RAISING   cx_fp_api.
+
+    "! Interface loaded in its original language, without language check
+    METHODS load_interface
+      IMPORTING iv_name                TYPE fpname
+                iv_mode                TYPE string DEFAULT if_fp_wb_object=>c_mode_read
+      RETURNING VALUE(ri_wb_interface) TYPE REF TO if_fp_wb_interface
+      RAISING   cx_fp_api.
+
+    "! Dynamic LOAD: the optional parameters missing on older releases are left out
+    METHODS call_load
+      IMPORTING iv_class      TYPE string
+      CHANGING  ct_parameters TYPE abap_parmbind_tab
+      RAISING   cx_fp_api.
+
     METHODS check_replace
       IMPORTING iv_original     TYPE fpname
                 iv_copy         TYPE fpname
@@ -188,7 +219,6 @@ CLASS zai_cl_adobe_form DEFINITION
     METHODS replace_layout
       IMPORTING iv_name      TYPE fpname
                 iv_layout    TYPE xstring
-                iv_language  TYPE sylangu
                 iv_transport TYPE trkorr
       RAISING   zai_cx_adobe_form.
 
@@ -248,7 +278,7 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     ENDIF.
 
     TRY.
-        DATA(li_wb_form) = cl_fp_wb_form=>load( lv_name ).
+        DATA(li_wb_form) = load_form( lv_name ).
         li_form ?= li_wb_form->get_object( ).
         DATA(li_layout) = li_form->get_layout( ).
         rs_form-layout = li_layout->get_layout_data( ).
@@ -304,7 +334,7 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     ENDIF.
 
     TRY.
-        DATA(li_wb_interface) = cl_fp_wb_interface=>load( lv_name ).
+        DATA(li_wb_interface) = load_interface( lv_name ).
         li_interface ?= li_wb_interface->get_object( ).
         rv_xml = cl_fp_helper=>convert_interface_to_xstring( li_interface ).
         li_wb_interface->free( ).
@@ -435,8 +465,8 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     " In place: the forms that use the interface stay linked to it
     DATA li_current TYPE REF TO if_fp_interface.
     TRY.
-        DATA(li_wb_interface) = cl_fp_wb_interface=>load( i_name = iv_name
-                                                          i_mode = if_fp_wb_object=>c_mode_write ).
+        DATA(li_wb_interface) = load_interface( iv_name = iv_name
+                                                iv_mode = if_fp_wb_object=>c_mode_write ).
         li_current ?= li_wb_interface->get_object( ).
         IF li_current->get_interface_type( ) <> ii_interface->get_interface_type( ).
           li_wb_interface->free( ).
@@ -621,8 +651,132 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     ENDTRY.
     normalize_ids( li_document ).
     clear_cache_info( li_document ).
+    sort_texts( li_document ).
     rv_xml = render( ii_document = li_document
                      iv_pretty   = abap_true ).
+  ENDMETHOD.
+
+  METHOD sort_texts.
+    " After a save the same form gave another XML: SAP reads the texts of context and layout in any order
+    TYPES: BEGIN OF ty_entry,
+             id       TYPE string,
+             language TYPE string,
+             node     TYPE REF TO if_ixml_node,
+           END OF ty_entry.
+    DATA lt_entries TYPE STANDARD TABLE OF ty_entry WITH EMPTY KEY.
+    DATA li_entry   TYPE REF TO if_ixml_element.
+
+    LOOP AT VALUE string_table( ( `CONTEXTT` ) ( `LAYOUTT` ) ) INTO DATA(lv_table).
+      DATA(li_collection) = ii_document->get_elements_by_tag_name_ns( lv_table ).
+      IF li_collection IS NOT BOUND.
+        CONTINUE.
+      ENDIF.
+      DATA(li_tables) = li_collection->create_iterator( ).
+      DATA(li_table)  = li_tables->get_next( ).
+      WHILE li_table IS BOUND.
+        CLEAR lt_entries.
+        DATA(li_child) = li_table->get_first_child( ).
+        WHILE li_child IS BOUND.
+          IF li_child->get_type( ) = if_ixml_node=>co_node_element.
+            li_entry ?= li_child.
+            DATA(li_id)       = li_entry->find_from_name( 'ID' ).
+            DATA(li_language) = li_entry->find_from_name( 'LANGUAGE' ).
+            APPEND VALUE #( id       = COND #( WHEN li_id IS BOUND THEN li_id->get_value( ) )
+                            language = COND #( WHEN li_language IS BOUND THEN li_language->get_value( ) )
+                            node     = li_child ) TO lt_entries.
+          ENDIF.
+          li_child = li_child->get_next( ).
+        ENDWHILE.
+        SORT lt_entries STABLE BY id language.
+        " REMOVE_NODE would also drop the content of the entry: REMOVE_CHILD only detaches it
+        LOOP AT lt_entries INTO DATA(ls_entry).
+          li_table->remove_child( ls_entry-node ).
+          li_table->append_child( ls_entry-node ).
+        ENDLOOP.
+        li_table = li_tables->get_next( ).
+      ENDWHILE.
+    ENDLOOP.
+  ENDMETHOD.
+
+  METHOD original_language.
+    SELECT SINGLE masterlang FROM tadir
+      WHERE pgmid    = 'R3TR'
+        AND object   = @iv_object
+        AND obj_name = @iv_name
+      INTO @rv_language.
+    IF sy-subrc <> 0.
+      CLEAR rv_language.
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD load_form.
+    " In the original language without language check: otherwise SAP returns the translation of the logon
+    " language and first merges the DIRTY translations (FP_REFRESH_LANGU_VERSION), so it writes FPLAYOUTT
+    " even when reading or fails; in write mode the lock asks in a popup whether to change the original
+    " language, a dump via RFC (DYNPRO_SEND_IN_BACKGROUND). I_DARK skips the correction dialogs
+    DATA(lv_language) = original_language( iv_name ).
+    DATA(lv_check)    = abap_true.
+    DATA(lv_dark)     = abap_true.
+    DATA(lt_parameters) = VALUE abap_parmbind_tab(
+      ( name = 'I_NAME'    kind = cl_abap_objectdescr=>exporting value = REF #( iv_name ) )
+      ( name = 'I_MODE'    kind = cl_abap_objectdescr=>exporting value = REF #( iv_mode ) )
+      ( name = 'I_DARK'    kind = cl_abap_objectdescr=>exporting value = REF #( lv_dark ) )
+      ( name = 'R_WB_FORM' kind = cl_abap_objectdescr=>receiving value = REF #( ri_wb_form ) ) ).
+    IF lv_language IS NOT INITIAL.
+      INSERT VALUE #( name = 'I_LANGUAGE' kind = cl_abap_objectdescr=>exporting value = REF #( lv_language ) )
+        INTO TABLE lt_parameters.
+      INSERT VALUE #( name = 'I_SUPPRESS_LANGUAGE_CHECK' kind = cl_abap_objectdescr=>exporting value = REF #( lv_check ) )
+        INTO TABLE lt_parameters.
+    ENDIF.
+    IF iv_transport IS NOT INITIAL.
+      INSERT VALUE #( name = 'I_ORDERNUM' kind = cl_abap_objectdescr=>exporting value = REF #( iv_transport ) )
+        INTO TABLE lt_parameters.
+    ENDIF.
+    call_load( EXPORTING iv_class      = `CL_FP_WB_FORM`
+               CHANGING  ct_parameters = lt_parameters ).
+  ENDMETHOD.
+
+  METHOD load_interface.
+    " As for forms: in another language the interface can ask in a popup whether to change the original language
+    DATA(lv_language) = original_language( iv_name   = iv_name
+                                           iv_object = gc_object_interface ).
+    DATA(lv_check)    = abap_true.
+    DATA(lt_parameters) = VALUE abap_parmbind_tab(
+      ( name = 'I_NAME'         kind = cl_abap_objectdescr=>exporting value = REF #( iv_name ) )
+      ( name = 'I_MODE'         kind = cl_abap_objectdescr=>exporting value = REF #( iv_mode ) )
+      ( name = 'R_WB_INTERFACE' kind = cl_abap_objectdescr=>receiving value = REF #( ri_wb_interface ) ) ).
+    IF lv_language IS NOT INITIAL.
+      INSERT VALUE #( name = 'I_LANGUAGE' kind = cl_abap_objectdescr=>exporting value = REF #( lv_language ) )
+        INTO TABLE lt_parameters.
+      INSERT VALUE #( name = 'I_SUPPRESS_LANGUAGE_CHECK' kind = cl_abap_objectdescr=>exporting value = REF #( lv_check ) )
+        INTO TABLE lt_parameters.
+    ENDIF.
+    call_load( EXPORTING iv_class      = `CL_FP_WB_INTERFACE`
+               CHANGING  ct_parameters = lt_parameters ).
+  ENDMETHOD.
+
+  METHOD call_load.
+    " I_DARK exists after 7.40, the language parameters not on every release: left out one step at a time
+    DATA lv_attempt TYPE i.
+    DO 3 TIMES.
+      lv_attempt = lv_attempt + 1.
+      TRY.
+          CALL METHOD (iv_class)=>('LOAD') PARAMETER-TABLE ct_parameters.
+          RETURN.
+        CATCH cx_sy_dyn_call_param_not_found INTO DATA(lx_missing).
+          CASE lv_attempt.
+            WHEN 1.
+              DELETE TABLE ct_parameters WITH TABLE KEY name = 'I_DARK'.
+            WHEN 2.
+              DELETE TABLE ct_parameters WITH TABLE KEY name = 'I_LANGUAGE'.
+              DELETE TABLE ct_parameters WITH TABLE KEY name = 'I_SUPPRESS_LANGUAGE_CHECK'.
+            WHEN OTHERS.
+              RAISE EXCEPTION TYPE cx_fp_api_usage
+                EXPORTING
+                  previous = lx_missing.
+          ENDCASE.
+      ENDTRY.
+    ENDDO.
   ENDMETHOD.
 
   METHOD normalize_ids.
@@ -714,7 +868,6 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
     TRY.
         replace_layout( iv_name      = iv_original
                         iv_layout    = renew_timestamp( ls_info-copy_layout )
-                        iv_language  = ls_info-language
                         iv_transport = iv_transport ).
         activate( iv_original ).
         rv_fm_name = function_module( iv_original ).
@@ -878,28 +1031,11 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
   METHOD replace_layout.
     DATA li_wb_form TYPE REF TO if_fp_wb_form.
     DATA li_form    TYPE REF TO if_fp_form.
-    " In the original language, without language check: in a form of another language the lock asks in a
-    " popup whether to change the original language, and via RFC that is a dump (DYNPRO_SEND_IN_BACKGROUND).
-    " The form is already in the request (corr_insert): I_DARK also skips the correction dialog
+    " The form is already in the request (corr_insert); load_form opens it in the original language
     TRY.
-        TRY.
-            CALL METHOD cl_fp_wb_form=>('LOAD')
-              EXPORTING
-                i_name                    = iv_name
-                i_mode                    = if_fp_wb_object=>c_mode_write
-                i_language                = iv_language
-                i_ordernum                = iv_transport
-                i_suppress_language_check = abap_true
-                i_dark                    = abap_true
-              RECEIVING
-                r_wb_form                 = li_wb_form.
-          CATCH cx_sy_dyn_call_error.
-            li_wb_form = cl_fp_wb_form=>load( i_name                    = iv_name
-                                              i_mode                    = if_fp_wb_object=>c_mode_write
-                                              i_language                = iv_language
-                                              i_ordernum                = iv_transport
-                                              i_suppress_language_check = abap_true ).
-        ENDTRY.
+        li_wb_form = load_form( iv_name      = iv_name
+                                iv_mode      = if_fp_wb_object=>c_mode_write
+                                iv_transport = iv_transport ).
         li_form ?= li_wb_form->get_object( ).
         li_form->get_layout( )->set_layout_data( iv_layout ).
         li_wb_form->save( ).

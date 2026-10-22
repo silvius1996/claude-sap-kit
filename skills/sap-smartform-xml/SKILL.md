@@ -12,7 +12,7 @@ installation, `ZAI` by default):
 |---|---|
 | `Custom_SmartFormRead(name)` | Saves the XML of any SmartForms to `output/smartforms/<NAME>.xml` |
 | `Custom_SmartFormWrite(name, file)` | Uploads the XML as a `<PREFIX>_*` form in `$TMP`: check, activation, FM generation. If the form exists, it first saves a backup in `output/smartforms/backup/` |
-| `Custom_PrintPreview(document, outputType, application?, form?, program?, routine?)` | Runs the print program of the NAST message to spool (without printing) and saves the PDF in `output/print-preview/` |
+| `Custom_PrintPreview(document, outputType, application?, form?, program?, routine?)` | Runs the print program of the NAST message to spool (without printing), saves the PDF in `output/print-preview/`, then rolls back what the print program wrote and deletes the spool |
 | `Custom_SmartFormReplace(action, original, copy, transport, token?)` | Replaces the customer form `Z*`/`Y*` with the approved `<PREFIX>_*` copy, under the given request. `prepare`: XML backup of the original + summary + token, no writes. `execute`: with the token; refused if the original or the copy changed after `prepare` |
 
 They are ARC-1 tools, named here by their short name: in Claude Code they are
@@ -59,8 +59,8 @@ SmartForms change:
    then `Custom_SmartFormWrite`, preview and compare with the reference using the same script:
    only what was meant to change should change. If something else changed, fix the XML and
    repeat.
-6. **Hand-over**: tell the user where to see the result (PDF sent, spool in `SP01` with title
-   `Claude preview ...`, form in transaction `SMARTFORMS` in display mode) and how to roll back
+6. **Hand-over**: tell the user where to see the result (PDF sent; the spool request goes with the
+   rollback after the preview, form in transaction `SMARTFORMS` in display mode) and how to roll back
    (upload the backup file again).
 
 7. **Replacing the original** (only if the user asks for it, with the request the user gives):
@@ -125,6 +125,7 @@ scratch.
 | "Different original language" | Copy created from an XML in another language: create the copy again from the XML of the original |
 | "... is already recorded in transport request ..." | `execute` failed after recording: the original is unchanged but is in the request; fix the copy and run prepare + execute again, or remove the object from the request before release |
 | Preview: "has no print program configured (TNAPR)" | Pass `form`, `program`, `routine` together |
+| Preview: "... not allowed: neither configured in TNAPR ..." | Use a program/routine configured for another output type, or ask the user to add the program to the TVARVC variable `ZAI_PREVIEW_PROGRAMS` (type S, value in LOW) |
 | Preview: HTTP 500 | The print program issued a `MESSAGE` E/A (e.g. nothing to print for that document) |
 
 The preview does not change the NAST message, but the print program really runs: some
