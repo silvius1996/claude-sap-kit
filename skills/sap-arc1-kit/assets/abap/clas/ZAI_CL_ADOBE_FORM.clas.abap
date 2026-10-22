@@ -688,8 +688,9 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
           li_child = li_child->get_next( ).
         ENDWHILE.
         SORT lt_entries STABLE BY id language.
+        " REMOVE_NODE would also drop the content of the entry: REMOVE_CHILD only detaches it
         LOOP AT lt_entries INTO DATA(ls_entry).
-          ls_entry-node->remove_node( ).
+          li_table->remove_child( ls_entry-node ).
           li_table->append_child( ls_entry-node ).
         ENDLOOP.
         li_table = li_tables->get_next( ).
@@ -765,9 +766,10 @@ CLASS zai_cl_adobe_form IMPLEMENTATION.
         CATCH cx_sy_dyn_call_param_not_found INTO DATA(lx_missing).
           CASE lv_attempt.
             WHEN 1.
-              DELETE ct_parameters WHERE name = 'I_DARK'.
+              DELETE TABLE ct_parameters WITH TABLE KEY name = 'I_DARK'.
             WHEN 2.
-              DELETE ct_parameters WHERE name = 'I_LANGUAGE' OR name = 'I_SUPPRESS_LANGUAGE_CHECK'.
+              DELETE TABLE ct_parameters WITH TABLE KEY name = 'I_LANGUAGE'.
+              DELETE TABLE ct_parameters WITH TABLE KEY name = 'I_SUPPRESS_LANGUAGE_CHECK'.
             WHEN OTHERS.
               RAISE EXCEPTION TYPE cx_fp_api_usage
                 EXPORTING
