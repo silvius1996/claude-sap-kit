@@ -4,6 +4,7 @@ FUNCTION zai_run_report
     VALUE(iv_tcode) TYPE tcode OPTIONAL
     VALUE(iv_variant) TYPE raldb_vari OPTIONAL
     VALUE(it_params) TYPE rsparams_tt OPTIONAL
+    VALUE(iv_max_rows) TYPE int4 OPTIONAL
   EXPORTING
     VALUE(ev_report) TYPE progname
     VALUE(ev_variant) TYPE raldb_vari
@@ -14,10 +15,11 @@ FUNCTION zai_run_report
     VALUE(ev_error) TYPE string.
 
   TRY.
-      DATA(ls_result) = NEW zai_cl_report_launcher( )->run( iv_report  = iv_report
-                                                                  iv_tcode   = iv_tcode
-                                                                  iv_variant = iv_variant
-                                                                  it_params  = it_params ).
+      DATA(ls_result) = NEW zai_cl_report_launcher( )->run( iv_report   = iv_report
+                                                                  iv_tcode    = iv_tcode
+                                                                  iv_variant  = iv_variant
+                                                                  it_params   = it_params
+                                                                  iv_max_rows = iv_max_rows ).
       ev_report      = ls_result-report.
       ev_variant     = ls_result-variant.
       ev_output_type = ls_result-output_type.

@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+Report launcher: authorization and row limit. Checked with abaplint (v750 syntax) and the Node tests only:
+**not tested live yet**. ABAP objects and extension must be updated together (new parameter `IV_MAX_ROWS` of
+`ZAI_RUN_REPORT`).
+
+- `Custom_LaunchReport`: the report is run only if the logged-on user is authorized for its authorization group
+  (`S_PROGRAM` with action `SUBMIT`, as SA38 does). Before, only `S_TCODE` was checked, and only when a transaction
+  was given: with a report name `SUBMIT` ran any executable report for whoever could call the function module.
+- `Custom_LaunchReport`: optional list of allowed reports in the TVARVC selection variable `ZAI_ALLOWED_REPORTS`
+  (names or patterns such as `ZMM*`; the name follows the kit prefix). When it has values every other report is
+  refused; without values nothing changes.
+- `Custom_LaunchReport`: `maxRows` is applied in ABAP. Before, the whole ALV was serialized to JSON and sent, and the
+  extension kept the first rows. The header still shows the full number of rows. An ALV table of kind hashed is
+  sent whole and cut by the extension, as before.
+- Tests: `npm test` checks the ABAP classes against the 7.50 syntax with abaplint (`@abaplint/core`, now a
+  development dependency); CI runs on Node 22 and 24. 2 more ABAP Unit tests in `ZAI_CL_REPORT_LAUNCHER` (10 in
+  all); 41 Node tests.
+- Development dependencies updated in the lockfile (`npm audit`: 11 advisories in packages installed with ARC-1
+  for the tests, none in the built extension).
+
 ## 0.7.0
 
 Replacement of a customer Adobe form with the approved copy, for layout changes. Tested live on S/4HANA

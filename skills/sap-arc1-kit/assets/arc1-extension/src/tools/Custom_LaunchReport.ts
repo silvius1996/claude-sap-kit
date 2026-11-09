@@ -1,12 +1,15 @@
 import { z } from 'zod';
 import { defineTool, OperationType } from 'arc-1/public';
+import { formatRows } from '../report-output.js';
 import { buildEnvelope, readElement, readFault, readItems, type RsParam } from '../soap-rfc.js';
 
 // Runs an executable report through the remote-enabled FM ZAI_RUN_REPORT, called via the
 // standard service /sap/bc/soap/rfc. The FM does the SUBMIT with variant and/or selection values,
 // without screen output, and returns the ALV data (JSON) or the classic list (text).
 //
-// The FM name is fixed: the tool is not a generic RFC gateway.
+// The FM name is fixed: the tool is not a generic RFC gateway. The FM checks the authorization of the
+// logged-on user for the report (S_PROGRAM) and the list of allowed reports (TVARVC ZAI_ALLOWED_REPORTS),
+// and returns only the first maxRows rows.
 // Enabled by SAP_ALLOW_PLUGIN_RAW_WRITES=true + SAP_ALLOW_WRITES=true and scope 'write',
 // because a report can also change data.
 const FUNCTION_NAME = 'ZAI_RUN_REPORT';
@@ -38,7 +41,7 @@ const schema = z
       .max(500)
       .default([])
       .describe('Selection values; they override the variant values. Several rows for the same select-option.'),
-    maxRows: z.number().int().min(1).max(5000).default(200).describe('Maximum rows returned.'),
+    maxRows: z.number().int().min(1).max(5000).default(200).describe('Maximum rows returned; the total number is always reported.'),
   })
   .refine((a) => a.report || a.tcode, { message: 'Specify report or tcode' });
 
@@ -70,6 +73,8 @@ export default defineTool({
       IV_TCODE: a.tcode?.toUpperCase(),
       IV_VARIANT: a.variant,
       IT_PARAMS: rsparams.length > 0 ? rsparams : undefined,
+      // The limit is applied in ABAP: the rows beyond it are neither serialized nor sent
+      IV_MAX_ROWS: String(a.maxRows),
     });
 
     const res = await ctx.http.post(SOAP_RFC_PATH, envelope, 'text/xml; charset=utf-8', {
@@ -94,21 +99,25 @@ export default defineTool({
     const variant = readElement(res.body, 'EV_VARIANT').trim();
     const outputType = readElement(res.body, 'EV_OUTPUT_TYPE').trim();
     const header = `Report ${report}${variant ? ` - variant ${variant}` : ''} - output ${outputType}`;
+    const total = Number(readElement(res.body, 'EV_ROW_COUNT').trim());
 
     if (outputType === 'ALV') {
-      const rows = JSON.parse(readElement(res.body, 'EV_DATA_JSON') || '[]') as unknown[];
-      const shown = rows.slice(0, a.maxRows);
-      const note = rows.length > shown.length ? ` (showing the first ${shown.length})` : '';
-      return {
-        content: [{ type: 'text', text: `${header}\nRows: ${rows.length}${note}\n${JSON.stringify(shown, null, 1)}` }],
-      };
+      let rows: unknown;
+      try {
+        rows = JSON.parse(readElement(res.body, 'EV_DATA_JSON') || '[]');
+      } catch {
+        rows = undefined;
+      }
+      if (!Array.isArray(rows)) {
+        return { isError: true, content: [{ type: 'text', text: `${header}\nThe ALV data returned by SAP cannot be read as JSON` }] };
+      }
+      const out = formatRows(rows, total, a.maxRows);
+      return { content: [{ type: 'text', text: `${header}\n${out.summary}\n${JSON.stringify(out.shown, null, 1)}` }] };
     }
 
     if (outputType === 'LIST') {
-      const lines = readItems(res.body, 'ET_LIST');
-      const shown = lines.slice(0, a.maxRows);
-      const note = lines.length > shown.length ? ` (showing the first ${shown.length})` : '';
-      return { content: [{ type: 'text', text: `${header}\nRows: ${lines.length}${note}\n${shown.join('\n')}` }] };
+      const out = formatRows(readItems(res.body, 'ET_LIST'), total, a.maxRows);
+      return { content: [{ type: 'text', text: `${header}\n${out.summary}\n${out.shown.join('\n')}` }] };
     }
 
     return { content: [{ type: 'text', text: `${header}\nThe report produced no output (no ALV and no list).` }] };

@@ -36,8 +36,8 @@ reports that ask for confirmations. To simply read data from tables, `SAPQuery` 
    `SAPQuery: SELECT variant FROM varid WHERE report = '<REPORT>'`. The content of a variant is
    often not readable via ADT: if you need to know what it filters, ask the user or compare the
    result with a run with explicit values.
-4. **Volume**: start with narrow filters. `maxRows` limits the returned rows (default 200),
-   but the report still processes everything: a report without filters on large tables can
+4. **Volume**: start with narrow filters. `maxRows` limits the rows serialized and returned
+   (default 200; the header always shows the full number), but the report still processes everything: a report without filters on large tables can
    run for minutes and hit the ADT timeout (e.g. MB52 without material or plant reads the whole
    stock). Always pass at least one key filter such as material or plant. Show the user only
    what is needed, especially with personal data.
@@ -83,3 +83,5 @@ Example: stock of plant 1001, storage locations M001 to M003, materials starting
 | "Variant ... does not exist ... in client" | Wrong name or variant of another client |
 | HTTP 500 from SOAP-RFC | The report issued a `MESSAGE` of type E/A (e.g. "no data"): review the filters |
 | "No authorization for transaction" | The user lacks the `S_TCODE` authorization |
+| "No authorization to run ... (S_PROGRAM, authorization group ...)" | The user lacks `S_PROGRAM` for the authorization group of the report, as in SA38. Do not look for another way to run it: tell the user |
+| "is not among the reports allowed on this system" | The system restricts the reports with the TVARVC variable `<PREFIX>_ALLOWED_REPORTS`. Only the user can add the report (transaction `STVARV`) |

@@ -52,7 +52,13 @@ Kit installation:
    if it is inactive, ask the user or the Basis team. Quick check: the first tool call returns
    HTTP 403/404 if the service is off.
 6. **SAP user authorizations**: `S_RFC` on the function group, plus those needed to run the
-   reports and read spool requests.
+   reports (`S_PROGRAM` for reports with an authorization group, `S_TCODE` for transactions) and
+   read spool requests.
+   **Allowed reports** (optional): a report without authorization group can be run by whoever can
+   call the function group. On a system shared with other users, or with real data, ask the user
+   whether to restrict the reports with the TVARVC selection variable `<PREFIX>_ALLOWED_REPORTS`
+   (transaction `STVARV`: names or patterns such as `ZMM*`). When it has values, every other
+   report is refused. The user creates it; Claude does not write TVARVC.
 7. **Adobe Document Services (ADS)**, only for the Adobe forms tools: without ADS they read forms
    but do not write them, and Adobe print output cannot be previewed. Manual check: report `FP_TEST_00`.
 
@@ -96,7 +102,7 @@ pass its content unchanged.
 
 - `SAPQuery`: `SELECT funcname, fmode FROM tfdir WHERE funcname LIKE '<PREFIX>_%'` → the 9 entry
   FMs with `FMODE = 'R'`, `<PREFIX>_PRINT_CALL_ROUTINE` empty.
-- `SAPDiagnose unittest` on the 4 classes: 8 (report launcher) + 10 (print preview) + 14 (SmartForms)
+- `SAPDiagnose unittest` on the 4 classes: 10 (report launcher) + 10 (print preview) + 14 (SmartForms)
   + 22 (Adobe forms) tests, no errors. Tests that find no
   suitable data on the system end with a **tolerable** assertion (`CL_ABAP_UNIT_ASSERT=>SKIP`
   does not exist on 7.50): ARC-1 then reports the class as `failed` with `severity: tolerable`.
@@ -115,7 +121,8 @@ pass its content unchanged.
 ## Step 4 — ARC-1 extension
 
 1. Copy `sap-kit/arc1-extension` into the project folder (e.g. `<project>/arc1-extension`).
-2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 36 Node tests).
+2. `npm install --ignore-scripts`, then `npm test` (builds into `dist/` and runs 41 Node tests, one of
+   which checks the ABAP classes against the 7.50 syntax).
    `--ignore-scripts` skips the native build of ARC-1 dependencies, which the extension does
    not need.
 3. In `.mcp.json`, in the ARC-1 server, add to `env`:

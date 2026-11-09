@@ -13,6 +13,8 @@ CLASS ltc_launcher DEFINITION FINAL
     METHODS run_without_report_refused FOR TESTING.
     METHODS run_dialog_tcode_refused FOR TESTING.
     METHODS run_missing_variant_refused FOR TESTING.
+    METHODS listed_by_name_or_pattern FOR TESTING.
+    METHODS not_listed FOR TESTING.
 ENDCLASS.
 
 
@@ -77,5 +79,19 @@ CLASS ltc_launcher IMPLEMENTATION.
         cl_abap_unit_assert=>fail( 'A missing variant must be refused' ).
       CATCH zai_cx_launcher ##NO_HANDLER.
     ENDTRY.
+  ENDMETHOD.
+
+  METHOD listed_by_name_or_pattern.
+    cl_abap_unit_assert=>assert_true( mo_cut->is_listed( iv_report   = 'RM07MLBS'
+                                                         it_patterns = VALUE #( ( `ZMM*` ) ( `rm07mlbs ` ) ) ) ).
+    cl_abap_unit_assert=>assert_true( mo_cut->is_listed( iv_report   = 'ZMM_STOCK'
+                                                         it_patterns = VALUE #( ( `ZMM*` ) ) ) ).
+  ENDMETHOD.
+
+  METHOD not_listed.
+    cl_abap_unit_assert=>assert_false( mo_cut->is_listed( iv_report   = 'RM07MLBS'
+                                                          it_patterns = VALUE #( ( `ZMM*` ) ( `` ) ) ) ).
+    cl_abap_unit_assert=>assert_false( mo_cut->is_listed( iv_report   = 'RM07MLBS'
+                                                          it_patterns = VALUE string_table( ) ) ).
   ENDMETHOD.
 ENDCLASS.

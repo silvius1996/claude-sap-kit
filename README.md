@@ -66,7 +66,8 @@ skills/
 - [ARC-1](https://github.com/arc-mcp/arc-1) 1.4.0 or later, configured in Claude Code with writes enabled.
 - SICF service `/sap/bc/soap/rfc` active.
 - For the Adobe forms tools: Adobe Document Services (ADS) configured (standard report `FP_TEST_00`).
-- SAP user with `S_RFC` on the kit function group, plus the authorizations for the reports to run and for spool requests.
+- SAP user with `S_RFC` on the kit function group, plus the authorizations for the reports to run (`S_PROGRAM` for
+  reports with an authorization group, `S_TCODE` when a transaction is given) and for spool requests.
 - Node.js 22.19+ or 24 (to build the extension) and Python 3 (for the scripts).
 
 ## Installation
@@ -105,6 +106,11 @@ The kit is designed to be safe even when an AI is driving it:
 - allowed packages, allowed requests and the author check are configured in the project `.mcp.json`;
 - nothing is ever deleted, with one exception: the SAP API cannot replace the context of an Adobe form,
   so an existing `ZAI_*` copy (own, in `$TMP`) is deleted and created again after its backup;
+- a report runs only if the logged-on user is authorized for it: `S_TCODE` when a transaction is given and
+  `S_PROGRAM` for its authorization group, as in SA38 (`SUBMIT` alone checks nothing). Reports without an
+  authorization group are open to whoever can call the kit function group, so on a shared system list the
+  allowed reports in the TVARVC selection variable `ZAI_ALLOWED_REPORTS` (transaction `STVARV`; names or
+  patterns such as `ZMM*`): when it has values, every other report is refused;
 - the skills ask for confirmation before running reports or print programs that change data.
 
 ## Business data and the model
@@ -150,6 +156,9 @@ cd skills/sap-arc1-kit/assets/arc1-extension
 npm ci --ignore-scripts
 npm test
 ```
+
+`npm test` also checks the ABAP classes against the SAP_BASIS 7.50 syntax with abaplint. It knows the syntax of
+the release, not the SAP objects the classes use: the real check is the activation on a system.
 
 The ABAP classes come with ABAP Unit tests: the installation skill runs them on the system.
 

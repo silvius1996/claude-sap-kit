@@ -17,6 +17,7 @@
     "arc-1": ">=1.4.0"
   },
   "devDependencies": {
+    "@abaplint/core": "^2.120.60",
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0",
     "zod": "^4.0.0"
